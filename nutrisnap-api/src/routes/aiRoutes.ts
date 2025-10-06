@@ -1,14 +1,12 @@
 import express, { Request, Response } from 'express';
 import fs from 'fs';
 import multer from 'multer';
-import { ClarifaiClient } from 'clarifai';
+import axios from 'axios';
 
 const router = express.Router();
 const upload = multer({ dest: 'uploads/' });
 
-const clarifai = new ClarifaiClient({
-  apiKey: process.env.CLARIFAI_API_KEY as string,
-});
+const CLARIFAI_API_KEY = process.env.CLARIFAI_API_KEY;
 
 router.post('/analyze-image', upload.single('foodImage'), async (req: Request, res: Response) => {
   if (!req.file) return res.status(400).json({ message: 'Niciun fișier primit.' });
@@ -28,15 +26,28 @@ router.post('/analyze-image', upload.single('foodImage'), async (req: Request, r
       Returnează răspunsul strict în format JSON.
     `;
 
-    const result = await clarifai.models.predict(
-      'general-image-recognition',
+    // Request la Clarifai REST API
+    const response = await axios.post(
+      'https://api.clarifai.com/v2/models/general-image-recognition/outputs',
       {
-        base64: base64Image,
-        text: prompt,
+        inputs: [
+          {
+            data: {
+              image: { base64: base64Image },
+              text: prompt
+            }
+          }
+        ]
+      },
+      {
+        headers: {
+          Authorization: `Key ${CLARIFAI_API_KEY}`,
+          'Content-Type': 'application/json'
+        }
       }
     );
 
-    const text = result?.outputs?.[0]?.data?.text?.raw || '';
+    const text = response.data?.outputs?.[0]?.data?.text?.raw || '';
     let jsonData: any;
 
     try {
