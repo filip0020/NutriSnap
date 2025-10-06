@@ -1,0 +1,12 @@
+# Dependențe
+/node_modules
+/nutri-app/node_modules
+/nutrisnap-api/node_modules
+
+# Fișiere de build
+/nutri-app/dist
+/nutrisnap-api/dist
+
+# Fișiere temporare și cache
+.DS_Store
+*.log
