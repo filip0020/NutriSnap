@@ -1,38 +1,24 @@
 {
-  "name": "nutrisnap-api",
-  "version": "2.0.0",
-  "description": "NutriSnap Backend API",
-  "main": "dist/server.js",
+  "name": "nutri-app",
+  "version": "1.0.0",
+  "description": "NutriSnap Frontend App",
   "scripts": {
-    "dev": "nodemon src/server.ts",
-    "build": "tsc",
-    "start": "node dist/server.js",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
   "dependencies": {
-    "axios": "^1.6.0",
-    "bcryptjs": "^2.4.3",
-    "cors": "^2.8.5",
-    "dotenv": "^16.3.1",
-    "express": "^4.18.2",
-    "jsonwebtoken": "^9.0.2",
-    "mongoose": "^8.0.0",
-    "multer": "^1.4.5-lts.1"
+    "axios": "^1.12.2",
+    "pinia": "^3.0.3",
+    "vue": "^3.3.4",
+    "vue-router": "^4.5.1"
   },
   "devDependencies": {
-    "@types/bcryptjs": "^2.4.6",
-    "@types/cors": "^2.8.17",
-    "@types/express": "^4.17.21",
-    "@types/jsonwebtoken": "^9.0.5",
-    "@types/multer": "^1.4.11",
-    "@types/node": "^20.10.0",
+    "@types/node": "^24.6.2",
+    "@vitejs/plugin-vue": "^6.0.1",
     "@vue/tsconfig": "^0.8.1",
-    "nodemon": "^3.0.2",
-    "ts-node": "^10.9.2",
-    "typescript": "^5.3.3"
+    "typescript": "^5.3.3",
+    "vite": "^7.1.9"
   },
   "engines": {
     "node": ">=18.0.0"
