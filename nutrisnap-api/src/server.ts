@@ -11,25 +11,45 @@ import aiRoutes from './routes/aiRoutes';
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-const corsOptions = {
-  origin: process.env.FRONTEND_URL,
+// ✅ CORS îmbunătățit - permite frontend-ul Vercel
+const allowedOrigins = [
+  'https://nutri-snap-two.vercel.app',
+  'http://localhost:5173',
+  'http://localhost:3000'
+];
+
+app.use(cors({
+  origin: (origin, callback) => {
+    // Permite requests fără origin (Postman, curl, etc.)
+    if (!origin) return callback(null, true);
+
+    if (allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      console.log('❌ Origin blocat:', origin);
+      callback(new Error('CORS not allowed'));
+    }
+  },
   credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
-};
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+  exposedHeaders: ['Content-Length', 'X-JSON'],
+  maxAge: 86400
+}));
 
-app.use(cors(corsOptions));
-app.options('*', cors(corsOptions));
+// Preflight pentru toate rutele
+app.options('*', cors());
 
-
-app.use(cors(corsOptions));
-
-app.options('*', cors(corsOptions));
-
+// Middleware pentru logging
+app.use((req, res, next) => {
+  console.log(`📨 ${req.method} ${req.path} - Origin: ${req.headers.origin}`);
+  next();
+});
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+// MongoDB
 const connectDB = async () => {
   try {
     await mongoose.connect(process.env.MONGO_URI!);
@@ -42,22 +62,67 @@ const connectDB = async () => {
 
 connectDB();
 
+// IMPORTANT: Rutele trebuie să aibă /api
 app.use('/api/auth', authRoutes);
 app.use('/api/meals', mealRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/ai', aiRoutes);
 
 app.get('/', (req: Request, res: Response) => {
-  res.json({ message: 'NutriSnap API 🚀' });
+  res.json({
+    message: 'NutriSnap API 🚀',
+    version: '1.0.0',
+    environment: process.env.NODE_ENV,
+    endpoints: {
+      auth: '/api/auth',
+      meals: '/api/meals',
+      users: '/api/users',
+      ai: '/api/ai'
+    }
+  });
 });
 
 app.get('/health', (req: Request, res: Response) => {
   res.json({
     status: 'OK',
-    database: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected'
+    database: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected',
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime()
   });
 });
 
-app.listen(PORT, () => {
-  console.log(`🚀 Server: http://localhost:${PORT}`);
+// 404
+app.use((req: Request, res: Response) => {
+  res.status(404).json({
+    message: 'Ruta nu există',
+    path: req.path,
+    method: req.method,
+    hint: 'Verifică dacă URL-ul începe cu /api'
+  });
 });
+
+// Error handler
+app.use((err: Error, req: Request, res: Response, next: NextFunction) => {
+  console.error('❌ Eroare:', err);
+  res.status(500).json({
+    message: 'Eroare server',
+    error: process.env.NODE_ENV === 'production' ? 'Internal Server Error' : err.message
+  });
+});
+
+const server = app.listen(PORT, () => {
+  console.log(`🚀 Server pornit pe port: ${PORT}`);
+  console.log(`📍 Frontend permis: ${allowedOrigins.join(', ')}`);
+  console.log(`🌍 Environment: ${process.env.NODE_ENV}`);
+});
+
+// Graceful shutdown
+process.on('SIGTERM', async () => {
+  console.log('🛑 SIGTERM - Închid serverul...');
+  server.close(async () => {
+    await mongoose.connection.close();
+    process.exit(0);
+  });
+});
+
+export default app;

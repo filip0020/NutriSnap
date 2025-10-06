@@ -1,9 +1,5 @@
-/// <reference types="vite/client" />
 import { defineStore } from 'pinia';
 import apiClient from '../utils/apiClient';
-import axios from 'axios';
-
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 
 interface User {
   _id: string;
@@ -42,7 +38,11 @@ export const useAuthStore = defineStore('auth', {
     async register(email: string, password: string) {
       this.loading = true;
       try {
-        const response = await axios.post(`${API_URL}/auth/register`, { email, password });
+        // ✅ Folosește apiClient în loc de axios direct
+        const response = await apiClient.post('/auth/register', {
+          email,
+          password
+        });
 
         this.user = response.data.user;
         this.accessToken = response.data.accessToken;
@@ -55,6 +55,7 @@ export const useAuthStore = defineStore('auth', {
 
         return response.data;
       } catch (error: any) {
+        console.error('❌ Eroare înregistrare:', error.response?.data || error.message);
         throw error.response?.data || { message: 'Eroare la înregistrare' };
       } finally {
         this.loading = false;
@@ -64,7 +65,11 @@ export const useAuthStore = defineStore('auth', {
     async login(email: string, password: string) {
       this.loading = true;
       try {
-        const response = await axios.post(`${API_URL}/auth/login`, { email, password });
+        // ✅ Folosește apiClient în loc de axios direct
+        const response = await apiClient.post('/auth/login', {
+          email,
+          password
+        });
 
         this.user = response.data.user;
         this.accessToken = response.data.accessToken;
@@ -77,6 +82,7 @@ export const useAuthStore = defineStore('auth', {
 
         return response.data;
       } catch (error: any) {
+        console.error('❌ Eroare login:', error.response?.data || error.message);
         throw error.response?.data || { message: 'Eroare la autentificare' };
       } finally {
         this.loading = false;
