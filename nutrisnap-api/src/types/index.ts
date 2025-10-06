@@ -25,4 +25,7 @@ export interface AuthRequest extends Request {
   user?: {
     id: string;
   };
+  body: any;
+  query: any;
+  headers: any;
 }

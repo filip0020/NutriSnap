@@ -48,7 +48,6 @@ app.use((req: Request, res: Response, next: NextFunction) => {
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// 🔌 Conectare MongoDB cu retry automat
 const connectDB = async (): Promise<void> => {
   try {
     await mongoose.connect(process.env.MONGO_URI!);

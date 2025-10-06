@@ -9,19 +9,20 @@ interface DecodedToken extends JwtPayload {
   id: string;
 }
 
-const protect = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
-  if (!req.headers.authorization || !req.headers.authorization.startsWith('Bearer')) {
+const protect = async (
+  req: AuthRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  const authHeader = req.headers?.authorization;
+
+  if (!authHeader || !authHeader.startsWith('Bearer')) {
     res.status(401).json({ message: 'Nu ești autorizat, token-ul lipsește.' });
     return;
   }
 
   try {
-    const token = req.headers.authorization.split(' ')[1];
-
-    if (!token) {
-      res.status(401).json({ message: 'Nu ești autorizat, token-ul lipsește.' });
-      return;
-    }
+    const token = authHeader.split(' ')[1];
 
     const decoded = jwt.verify(token, JWT_SECRET) as DecodedToken;
 
@@ -46,12 +47,12 @@ const protect = async (req: AuthRequest, res: Response, next: NextFunction): Pro
 
     next();
   } catch (error) {
-    if (error instanceof jwt.JsonWebTokenError) {
-      res.status(401).json({ message: 'Nu ești autorizat, token invalid.' });
-      return;
-    }
     if (error instanceof jwt.TokenExpiredError) {
       res.status(401).json({ message: 'Nu ești autorizat, token-ul a expirat.' });
+      return;
+    }
+    if (error instanceof jwt.JsonWebTokenError) {
+      res.status(401).json({ message: 'Nu ești autorizat, token invalid.' });
       return;
     }
 

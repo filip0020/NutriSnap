@@ -1,6 +1,7 @@
 import mongoose, { Document, Schema, Types } from 'mongoose';
 import bcrypt from 'bcryptjs';
 import { Request } from 'express';
+import { ParsedQs } from 'qs';
 
 export interface AuthUser {
   id: string;
@@ -9,13 +10,15 @@ export interface AuthUser {
   activityLevel: number;
 }
 
-export interface AuthRequest extends Request {
+// AuthRequest generic corect
+export interface AuthRequest<ReqBody = any, ReqQuery extends ParsedQs = ParsedQs> extends Request {
   user?: AuthUser;
+  body: ReqBody;
+  query: ReqQuery;
 }
 
-
 export interface IUserDocument extends Document {
-  _id: Types.ObjectId; // 👈 adăugat explicit
+  _id: Types.ObjectId;
   email: string;
   password: string;
   caloriesTarget: number;
@@ -24,25 +27,10 @@ export interface IUserDocument extends Document {
 }
 
 const UserSchema: Schema<IUserDocument> = new Schema({
-  email: {
-    type: String,
-    required: true,
-    unique: true,
-    lowercase: true,
-    trim: true
-  },
-  password: {
-    type: String,
-    required: true
-  },
-  caloriesTarget: {
-    type: Number,
-    default: 2000
-  },
-  activityLevel: {
-    type: Number,
-    default: 0
-  }
+  email: { type: String, required: true, unique: true, lowercase: true, trim: true },
+  password: { type: String, required: true },
+  caloriesTarget: { type: Number, default: 2000 },
+  activityLevel: { type: Number, default: 0 }
 });
 
 UserSchema.pre<IUserDocument>('save', async function (next) {

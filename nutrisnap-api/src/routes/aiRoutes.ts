@@ -31,7 +31,6 @@ router.post(
       Returnează răspunsul strict în format JSON.
     `;
 
-      // Clarifai REST API call
       const response = await axios.post(
         'https://api.clarifai.com/v2/models/general-image-recognition/outputs',
         {
@@ -69,13 +68,14 @@ router.post(
         nutrients: {
           protein: jsonData.protein || 0,
           carbs: jsonData.carbs || 0,
-          fats: jsonData.fats || 0,
-        },
+          fats: jsonData.fats || 0
+        }
       });
     } catch (error) {
       console.error('Eroare AI:', error);
       res.status(500).json({ message: 'Eroare la procesare imagine.' });
     }
-  });
+  }
+);
 
 export default router;

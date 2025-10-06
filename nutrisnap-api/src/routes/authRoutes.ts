@@ -1,18 +1,21 @@
-import { Router, Request, Response } from 'express';
+import { Router, Response } from 'express';
 import User, { IUserDocument } from '../models/User';
 import {
   generateAccessToken,
   generateRefreshToken,
   verifyRefreshToken,
-  revokeRefreshToken,
-  revokeAllUserTokens
+  revokeRefreshToken
 } from '../utils/tokenUtils';
 import protect from '../middleware/auth';
-import { AuthRequest } from '../types';
+import { AuthRequest } from '../models/User'; // folosim AuthRequest din User.ts
 
 const router = Router();
 
-router.post('/register', async (req: Request, res: Response): Promise<void> => {
+interface RegisterBody { email: string; password: string; }
+interface LoginBody { email: string; password: string; }
+interface RefreshBody { refreshToken: string; }
+
+router.post('/register', async (req: AuthRequest<RegisterBody>, res: Response): Promise<void> => {
   try {
     const { email, password } = req.body;
 
@@ -23,13 +26,13 @@ router.post('/register', async (req: Request, res: Response): Promise<void> => {
 
     if (password.length < 6) {
       res.status(400).json({ message: 'Parola trebuie să aibă minim 6 caractere.' });
-      return
+      return;
     }
 
     const existingUser = await User.findOne({ email });
     if (existingUser) {
       res.status(400).json({ message: 'Un utilizator cu acest email există deja.' });
-      return
+      return;
     }
 
     const user = new User({ email, password });
@@ -54,7 +57,7 @@ router.post('/register', async (req: Request, res: Response): Promise<void> => {
   }
 });
 
-router.post('/login', async (req: Request, res: Response): Promise<void> => {
+router.post('/login', async (req: AuthRequest<LoginBody>, res: Response): Promise<void> => {
   try {
     const { email, password } = req.body;
 
@@ -66,13 +69,13 @@ router.post('/login', async (req: Request, res: Response): Promise<void> => {
     const user: IUserDocument | null = await User.findOne({ email });
     if (!user) {
       res.status(401).json({ message: 'Email sau parolă incorectă.' });
-      return
+      return;
     }
 
     const isMatch = await user.comparePassword(password);
     if (!isMatch) {
       res.status(401).json({ message: 'Email sau parolă incorectă.' });
-      return
+      return;
     }
 
     const accessToken = generateAccessToken(user._id.toString());
@@ -94,20 +97,18 @@ router.post('/login', async (req: Request, res: Response): Promise<void> => {
   }
 });
 
-router.post('/refresh', async (req: Request, res: Response): Promise<void> => {
+router.post('/refresh', async (req: AuthRequest<RefreshBody>, res: Response): Promise<void> => {
   try {
     const { refreshToken } = req.body;
-
     if (!refreshToken) {
       res.status(400).json({ message: 'Refresh token lipsește.' });
-      return
+      return;
     }
 
     const userId = await verifyRefreshToken(refreshToken);
-
     if (!userId) {
       res.status(401).json({ message: 'Refresh token invalid sau expirat.' });
-      return
+      return;
     }
 
     const newAccessToken = generateAccessToken(userId);
@@ -118,7 +119,7 @@ router.post('/refresh', async (req: Request, res: Response): Promise<void> => {
   }
 });
 
-router.post('/logout', async (req: Request, res: Response) => {
+router.post('/logout', async (req: AuthRequest<{ refreshToken?: string }>, res: Response) => {
   try {
     const { refreshToken } = req.body;
     if (refreshToken) {
@@ -146,6 +147,5 @@ router.get('/verify', protect, async (req: AuthRequest, res: Response): Promise<
 
   res.json({ message: 'Token valid', user });
 });
-
 
 export default router;
