@@ -22,7 +22,7 @@ router.post('/', auth_1.default, async (req, res) => {
             calories,
             nutrients: entryType !== 'exercise' ? (nutrients || { protein: 0, carbs: 0, fats: 0 }) : { protein: 0, carbs: 0, fats: 0 },
             entryType,
-            date: date || new Date()
+            date: date ? new Date(date) : new Date()
         });
         await newMeal.save();
         res.status(201).json(newMeal);
@@ -33,8 +33,7 @@ router.post('/', auth_1.default, async (req, res) => {
 });
 router.get('/report', auth_1.default, async (req, res) => {
     const userId = req.user.id;
-    const { period = 'daily' } = req.query;
-    let { date: dateQuery } = req.query;
+    const { period = 'daily', date: dateQuery } = req.query;
     let startDate;
     let endDate;
     const baseDate = dateQuery ? new Date(dateQuery) : new Date();
@@ -43,7 +42,7 @@ router.get('/report', auth_1.default, async (req, res) => {
     endDate.setHours(23, 59, 59, 999);
     switch (period) {
         case 'weekly':
-            startDate = new Date(baseDate.getTime() - (7 * 24 * 60 * 60 * 1000));
+            startDate = new Date(baseDate.getTime() - 7 * 24 * 60 * 60 * 1000);
             break;
         case 'monthly':
             startDate = new Date(baseDate.getFullYear(), baseDate.getMonth(), 1);
@@ -51,8 +50,6 @@ router.get('/report', auth_1.default, async (req, res) => {
         case 'daily':
         default:
             startDate = baseDate;
-            endDate = new Date(baseDate);
-            endDate.setHours(23, 59, 59, 999);
             break;
     }
     try {
@@ -62,20 +59,15 @@ router.get('/report', auth_1.default, async (req, res) => {
             return;
         }
         const { caloriesTarget, activityLevel } = user;
-        const meals = await Meal_1.default.find({
-            userId: userId,
-            date: { $gte: startDate, $lte: endDate }
-        }).sort({ date: -1 });
+        const meals = await Meal_1.default.find({ userId, date: { $gte: startDate, $lte: endDate } }).sort({ date: -1 });
         let totalConsumed = 0;
         let totalBurnedFromEntries = 0;
         const totalDays = Math.ceil((endDate.getTime() - startDate.getTime()) / (24 * 60 * 60 * 1000));
         meals.forEach(meal => {
-            if (meal.entryType === 'exercise') {
+            if (meal.entryType === 'exercise')
                 totalBurnedFromEntries += meal.calories;
-            }
-            else {
+            else
                 totalConsumed += meal.calories;
-            }
         });
         const baseActivityBurned = activityLevel * totalDays;
         const totalBurned = totalBurnedFromEntries + baseActivityBurned;
@@ -84,19 +76,12 @@ router.get('/report', auth_1.default, async (req, res) => {
         const deficitOrSurplus = netCalories - targetCaloriesTotal;
         const status = deficitOrSurplus > 100 ? 'surplus' : deficitOrSurplus < -100 ? 'deficit' : 'maintenance';
         res.status(200).json({
-            summary: {
-                target: targetCaloriesTotal,
-                totalConsumed: totalConsumed,
-                totalBurned: totalBurned,
-                netCalories: netCalories,
-                balance: deficitOrSurplus,
-                status: status,
-            },
-            meals: meals
+            summary: { target: targetCaloriesTotal, totalConsumed, totalBurned, netCalories, balance: deficitOrSurplus, status },
+            meals
         });
     }
     catch (error) {
-        console.error("Eroare la generarea raportului:", error);
+        console.error('Eroare la generarea raportului:', error);
         res.status(500).json({ message: 'Eroare la generarea raportului caloric.' });
     }
 });

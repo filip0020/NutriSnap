@@ -27,7 +27,6 @@ router.post('/analyze-image', upload.single('foodImage'), async (req, res) => {
       - Grăsimi (g)
       Returnează răspunsul strict în format JSON.
     `;
-        // Clarifai REST API call
         const response = await axios_1.default.post('https://api.clarifai.com/v2/models/general-image-recognition/outputs', {
             inputs: [
                 {
@@ -58,8 +57,8 @@ router.post('/analyze-image', upload.single('foodImage'), async (req, res) => {
             nutrients: {
                 protein: jsonData.protein || 0,
                 carbs: jsonData.carbs || 0,
-                fats: jsonData.fats || 0,
-            },
+                fats: jsonData.fats || 0
+            }
         });
     }
     catch (error) {

@@ -30,18 +30,12 @@ router.put('/profile', auth_1.default, async (req, res) => {
             res.status(404).json({ message: 'Utilizatorul nu a fost găsit.' });
             return;
         }
-        if (caloriesTarget !== undefined && typeof caloriesTarget === 'number') {
+        if (caloriesTarget !== undefined)
             user.caloriesTarget = caloriesTarget;
-        }
-        if (activityLevel !== undefined && typeof activityLevel === 'number') {
+        if (activityLevel !== undefined)
             user.activityLevel = activityLevel;
-        }
         await user.save();
-        res.status(200).json({
-            email: user.email,
-            caloriesTarget: user.caloriesTarget,
-            activityLevel: user.activityLevel
-        });
+        res.status(200).json({ email: user.email, caloriesTarget: user.caloriesTarget, activityLevel: user.activityLevel });
     }
     catch (error) {
         res.status(500).json({ message: 'Eroare la actualizarea profilului.' });

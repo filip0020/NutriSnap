@@ -39,25 +39,10 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const mongoose_1 = __importStar(require("mongoose"));
 const bcryptjs_1 = __importDefault(require("bcryptjs"));
 const UserSchema = new mongoose_1.Schema({
-    email: {
-        type: String,
-        required: true,
-        unique: true,
-        lowercase: true,
-        trim: true
-    },
-    password: {
-        type: String,
-        required: true
-    },
-    caloriesTarget: {
-        type: Number,
-        default: 2000
-    },
-    activityLevel: {
-        type: Number,
-        default: 0
-    }
+    email: { type: String, required: true, unique: true, lowercase: true, trim: true },
+    password: { type: String, required: true },
+    caloriesTarget: { type: Number, default: 2000 },
+    activityLevel: { type: Number, default: 0 }
 });
 UserSchema.pre('save', async function (next) {
     if (!this.isModified('password'))

@@ -13,15 +13,13 @@ const userRoutes_1 = __importDefault(require("./routes/userRoutes"));
 const aiRoutes_1 = __importDefault(require("./routes/aiRoutes"));
 const app = (0, express_1.default)();
 const PORT = process.env.PORT || 5000;
-// ✅ CORS îmbunătățit - permite frontend-ul Vercel
 const allowedOrigins = [
     'https://nutri-snap-two.vercel.app',
     'http://localhost:5173',
     'http://localhost:3000'
 ];
-app.use((0, cors_1.default)({
+const corsOptions = {
     origin: (origin, callback) => {
-        // Permite requests fără origin (Postman, curl, etc.)
         if (!origin)
             return callback(null, true);
         if (allowedOrigins.includes(origin)) {
@@ -37,17 +35,17 @@ app.use((0, cors_1.default)({
     allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
     exposedHeaders: ['Content-Length', 'X-JSON'],
     maxAge: 86400
-}));
-// Preflight pentru toate rutele
+};
+app.use((0, cors_1.default)(corsOptions));
+app.options('*', (0, cors_1.default)(corsOptions));
 app.options('*', (0, cors_1.default)());
-// Middleware pentru logging
 app.use((req, res, next) => {
-    console.log(`📨 ${req.method} ${req.path} - Origin: ${req.headers.origin}`);
+    console.log(`📨 ${req.method} ${req.path} - Origin: ${req.headers.origin || 'unknown'}`);
     next();
 });
+// Body parsers
 app.use(express_1.default.json());
 app.use(express_1.default.urlencoded({ extended: true }));
-// MongoDB
 const connectDB = async () => {
     try {
         await mongoose_1.default.connect(process.env.MONGO_URI);
@@ -55,20 +53,22 @@ const connectDB = async () => {
     }
     catch (err) {
         console.error('❌ Eroare MongoDB:', err);
+        console.log('🔁 Reîncercare în 5 secunde...');
         setTimeout(connectDB, 5000);
     }
 };
 connectDB();
-// IMPORTANT: Rutele trebuie să aibă /api
+// ✅ Rute principale
 app.use('/api/auth', authRoutes_1.default);
 app.use('/api/meals', mealRoutes_1.default);
 app.use('/api/users', userRoutes_1.default);
 app.use('/api/ai', aiRoutes_1.default);
+// ✅ Endpoint de test simplu
 app.get('/', (req, res) => {
     res.json({
         message: 'NutriSnap API 🚀',
         version: '1.0.0',
-        environment: process.env.NODE_ENV,
+        environment: process.env.NODE_ENV || 'development',
         endpoints: {
             auth: '/api/auth',
             meals: '/api/meals',
@@ -77,6 +77,7 @@ app.get('/', (req, res) => {
         }
     });
 });
+// ✅ Endpoint healthcheck (pentru Render)
 app.get('/health', (req, res) => {
     res.json({
         status: 'OK',
@@ -85,7 +86,7 @@ app.get('/health', (req, res) => {
         uptime: process.uptime()
     });
 });
-// 404
+// 404 fallback
 app.use((req, res) => {
     res.status(404).json({
         message: 'Ruta nu există',
@@ -94,9 +95,9 @@ app.use((req, res) => {
         hint: 'Verifică dacă URL-ul începe cu /api'
     });
 });
-// Error handler
+// Eroare globală
 app.use((err, req, res, next) => {
-    console.error('❌ Eroare:', err);
+    console.error('❌ Eroare server:', err);
     res.status(500).json({
         message: 'Eroare server',
         error: process.env.NODE_ENV === 'production' ? 'Internal Server Error' : err.message
@@ -105,9 +106,9 @@ app.use((err, req, res, next) => {
 const server = app.listen(PORT, () => {
     console.log(`🚀 Server pornit pe port: ${PORT}`);
     console.log(`📍 Frontend permis: ${allowedOrigins.join(', ')}`);
-    console.log(`🌍 Environment: ${process.env.NODE_ENV}`);
+    console.log(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
 });
-// Graceful shutdown
+// Închidere sigură (Render face SIGTERM la redeploy)
 process.on('SIGTERM', async () => {
     console.log('🛑 SIGTERM - Închid serverul...');
     server.close(async () => {
