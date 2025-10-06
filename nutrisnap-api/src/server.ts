@@ -11,14 +11,20 @@ import aiRoutes from './routes/aiRoutes';
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-app.use(cors({
+const corsOptions = {
   origin: process.env.FRONTEND_URL,
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
-}));
+  allowedHeaders: ['Content-Type', 'Authorization'],
+};
 
-app.options('*', cors());
+app.use(cors(corsOptions));
+app.options('*', cors(corsOptions));
+
+
+app.use(cors(corsOptions));
+
+app.options('*', cors(corsOptions));
 
 
 app.use(express.json());
