@@ -15,7 +15,6 @@ router.post('/analyze-image', upload.single('foodImage'), async (req: Request, r
     const imageBytes = fs.readFileSync(req.file.path);
     const base64Image = imageBytes.toString('base64');
 
-    // Prompt inteligent pentru model
     const prompt = `
       Analizează imaginea următoare. Identifică mâncarea și oferă:
       - Numele felului de mâncare
@@ -26,7 +25,7 @@ router.post('/analyze-image', upload.single('foodImage'), async (req: Request, r
       Returnează răspunsul strict în format JSON.
     `;
 
-    // Request la Clarifai REST API
+    // Clarifai REST API call
     const response = await axios.post(
       'https://api.clarifai.com/v2/models/general-image-recognition/outputs',
       {
