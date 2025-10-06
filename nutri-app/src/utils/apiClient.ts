@@ -1,4 +1,3 @@
-/// <reference types="vite/client" />
 import axios from 'axios';
 import type { AxiosInstance, AxiosError, InternalAxiosRequestConfig } from 'axios';
 
