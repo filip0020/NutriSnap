@@ -2,12 +2,12 @@ import { Router, Response } from 'express';
 import protect from '../middleware/auth';
 import Meal, { IMealDocument } from '../models/Meal';
 import User from '../models/User';
-import { AuthRequest } from '../models/User'; // folosește AuthRequest corect
+import { AuthRequest } from '../models/User';
 
 interface ReportQuery {
     period?: string;
     date?: string;
-    [key: string]: any; // compatibil cu ParsedQs
+    [key: string]: any;
 }
 
 interface IMeal {

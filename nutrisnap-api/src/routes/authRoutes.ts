@@ -7,7 +7,7 @@ import {
   revokeRefreshToken
 } from '../utils/tokenUtils';
 import protect from '../middleware/auth';
-import { AuthRequest } from '../models/User'; // folosim AuthRequest din User.ts
+import { AuthRequest } from '../models/User';
 
 const router = Router();
 

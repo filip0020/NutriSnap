@@ -10,7 +10,6 @@ export interface AuthUser {
   activityLevel: number;
 }
 
-// AuthRequest generic corect
 export interface AuthRequest<ReqBody = any, ReqQuery extends ParsedQs = ParsedQs> extends Request {
   user?: AuthUser;
   body: ReqBody;
