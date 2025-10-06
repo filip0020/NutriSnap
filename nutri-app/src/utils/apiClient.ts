@@ -2,16 +2,15 @@
 import axios from 'axios';
 import type { AxiosInstance, AxiosError, InternalAxiosRequestConfig } from 'axios';
 
-// ✅ URL corect - Render
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 
-console.log('🔵 API_URL configurat:', API_URL); // DEBUG - vezi ce URL se folosește
+console.log('🔵 API_URL configurat:', API_URL);
 
 const apiClient: AxiosInstance = axios.create({
   baseURL: API_URL,
   headers: { 'Content-Type': 'application/json' },
-  timeout: 30000, // Mărit la 30s pentru Render (free tier poate fi lent)
-  withCredentials: false // Important pentru CORS
+  timeout: 30000,
+  withCredentials: false
 });
 
 apiClient.interceptors.request.use(
@@ -20,7 +19,8 @@ apiClient.interceptors.request.use(
     if (accessToken && config.headers) {
       config.headers.Authorization = `Bearer ${accessToken}`;
     }
-    console.log('📤 Request către:', config.baseURL + config.url); // DEBUG
+    const url = config.baseURL && config.url ? `${config.baseURL}${config.url}` : config.url || 'unknown';
+    console.log('📤 Request către:', url);
     return config;
   }
 );
