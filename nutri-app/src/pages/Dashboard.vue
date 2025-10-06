@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { ref, onMounted, watch } from 'vue';
 import { useAuthStore } from '../store/authStore';
-import { getMealReport, MealReport } from '../services/mealService';
+import { getMealReport } from '../services/mealService';
+import type { MealReport } from '../services/mealService';
 
 const authStore = useAuthStore();
 const report = ref<MealReport | null>(null);

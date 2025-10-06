@@ -19,13 +19,13 @@ const isLoading = ref(false);
 const error = ref<string | null>(null);
 
 const emit = defineEmits<{
-    (e: 'analysis-complete', result: AnalysisResult): void
+  (e: 'analysis-complete', result: AnalysisResult): void
 }>();
 
 const handleFileUpload = (event: Event) => {
   const target = event.target as HTMLInputElement;
   if (target.files && target.files.length > 0) {
-    selectedFile.value = target.files[0];
+    selectedFile.value = target.files[0]!;
   }
 };
 
@@ -43,18 +43,18 @@ const analyzeImage = async () => {
 
   try {
     const response = await axios.post<AnalysisResult>('http://localhost:3000/api/ai/analyze-image', formData, {
-        headers: {
-            'Content-Type': 'multipart/form-data'
-        }
+      headers: {
+        'Content-Type': 'multipart/form-data'
+      }
     });
 
-    emit('analysis-complete', response.data); 
+    emit('analysis-complete', response.data);
 
   } catch (err: any) {
     error.value = err.response?.data?.message || 'Eroare la analiza imaginii. Ești logat?';
   } finally {
     isLoading.value = false;
-    selectedFile.value = null; 
+    selectedFile.value = null;
     const fileInput = document.getElementById('foodImageUpload') as HTMLInputElement;
     if (fileInput) fileInput.value = '';
   }
@@ -66,20 +66,12 @@ const analyzeImage = async () => {
     <h3 class="text-xl font-semibold mb-4 text-center">Scanare Hrană (AI)</h3>
 
     <div class="mb-4">
-      <input 
-        id="foodImageUpload"
-        type="file" 
-        @change="handleFileUpload" 
-        accept="image/*" 
-        class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
-      />
+      <input id="foodImageUpload" type="file" @change="handleFileUpload" accept="image/*"
+        class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100" />
     </div>
 
-    <button 
-      @click="analyzeImage" 
-      :disabled="!selectedFile || isLoading"
-      class="w-full py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50"
-    >
+    <button @click="analyzeImage" :disabled="!selectedFile || isLoading"
+      class="w-full py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50">
       {{ isLoading ? 'Analizez Imaginea...' : 'Analizează Imaginea' }}
     </button>
 

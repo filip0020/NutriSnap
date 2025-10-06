@@ -1,4 +1,4 @@
-import apiClient from '../../utils/apiClient';
+import apiClient from '../utils/apiClient';
 
 export interface Nutrients {
   protein: number;
