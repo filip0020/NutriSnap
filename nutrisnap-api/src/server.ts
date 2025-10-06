@@ -1,7 +1,7 @@
 import 'dotenv/config';
 import express, { Request, Response, NextFunction } from 'express';
 import mongoose from 'mongoose';
-import cors from 'cors';
+import cors, { CorsOptionsDelegate } from 'cors';
 
 import authRoutes from './routes/authRoutes';
 import mealRoutes from './routes/mealRoutes';
@@ -11,18 +11,15 @@ import aiRoutes from './routes/aiRoutes';
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-// ✅ CORS îmbunătățit - permite frontend-ul Vercel
 const allowedOrigins = [
   'https://nutri-snap-two.vercel.app',
   'http://localhost:5173',
   'http://localhost:3000'
 ];
 
-app.use(cors({
-  origin: (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
-    // Permite requests fără origin (Postman, curl, etc.)
+const corsOptions: cors.CorsOptions = {
+  origin: (origin, callback) => {
     if (!origin) return callback(null, true);
-
     if (allowedOrigins.includes(origin)) {
       callback(null, true);
     } else {
@@ -35,44 +32,48 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
   exposedHeaders: ['Content-Length', 'X-JSON'],
   maxAge: 86400
-}));
+};
 
-// Preflight pentru toate rutele
+app.use(cors(corsOptions));
+app.options('*', cors(corsOptions));
+
 app.options('*', cors());
 
-// Middleware pentru logging
-app.use((req, res, next) => {
-  console.log(`📨 ${req.method} ${req.path} - Origin: ${req.headers.origin}`);
+app.use((req: Request, res: Response, next: NextFunction) => {
+  console.log(`📨 ${req.method} ${req.path} - Origin: ${req.headers.origin || 'unknown'}`);
   next();
 });
 
+// Body parsers
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// MongoDB
-const connectDB = async () => {
+// 🔌 Conectare MongoDB cu retry automat
+const connectDB = async (): Promise<void> => {
   try {
     await mongoose.connect(process.env.MONGO_URI!);
     console.log('✅ MongoDB conectat');
   } catch (err) {
     console.error('❌ Eroare MongoDB:', err);
+    console.log('🔁 Reîncercare în 5 secunde...');
     setTimeout(connectDB, 5000);
   }
 };
 
 connectDB();
 
-// IMPORTANT: Rutele trebuie să aibă /api
+// ✅ Rute principale
 app.use('/api/auth', authRoutes);
 app.use('/api/meals', mealRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/ai', aiRoutes);
 
+// ✅ Endpoint de test simplu
 app.get('/', (req: Request, res: Response) => {
   res.json({
     message: 'NutriSnap API 🚀',
     version: '1.0.0',
-    environment: process.env.NODE_ENV,
+    environment: process.env.NODE_ENV || 'development',
     endpoints: {
       auth: '/api/auth',
       meals: '/api/meals',
@@ -82,6 +83,7 @@ app.get('/', (req: Request, res: Response) => {
   });
 });
 
+// ✅ Endpoint healthcheck (pentru Render)
 app.get('/health', (req: Request, res: Response) => {
   res.json({
     status: 'OK',
@@ -91,7 +93,7 @@ app.get('/health', (req: Request, res: Response) => {
   });
 });
 
-// 404
+// 404 fallback
 app.use((req: Request, res: Response) => {
   res.status(404).json({
     message: 'Ruta nu există',
@@ -101,9 +103,9 @@ app.use((req: Request, res: Response) => {
   });
 });
 
-// Error handler
+// Eroare globală
 app.use((err: Error, req: Request, res: Response, next: NextFunction) => {
-  console.error('❌ Eroare:', err);
+  console.error('❌ Eroare server:', err);
   res.status(500).json({
     message: 'Eroare server',
     error: process.env.NODE_ENV === 'production' ? 'Internal Server Error' : err.message
@@ -113,10 +115,10 @@ app.use((err: Error, req: Request, res: Response, next: NextFunction) => {
 const server = app.listen(PORT, () => {
   console.log(`🚀 Server pornit pe port: ${PORT}`);
   console.log(`📍 Frontend permis: ${allowedOrigins.join(', ')}`);
-  console.log(`🌍 Environment: ${process.env.NODE_ENV}`);
+  console.log(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
 });
 
-// Graceful shutdown
+// Închidere sigură (Render face SIGTERM la redeploy)
 process.on('SIGTERM', async () => {
   console.log('🛑 SIGTERM - Închid serverul...');
   server.close(async () => {
