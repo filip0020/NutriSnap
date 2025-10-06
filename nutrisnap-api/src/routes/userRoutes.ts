@@ -5,15 +5,16 @@ import { AuthRequest } from '../types';
 
 const router = Router();
 
-router.get('/profile', protect, async (req: AuthRequest, res: Response) => {
+router.get('/profile', protect, async (req: AuthRequest, res: Response): Promise<void> => {
     const userId = req.user!.id;
     try {
         const user = await User.findById(userId).select('email caloriesTarget activityLevel');
 
         if (!user) {
-            return res.status(404).json({ message: 'Utilizatorul nu a fost găsit.' });
+            res.status(404).json({ message: 'Utilizatorul nu a fost găsit.' });
+            return
         }
-        
+
         res.status(200).json(user);
 
     } catch (error) {
@@ -21,7 +22,7 @@ router.get('/profile', protect, async (req: AuthRequest, res: Response) => {
     }
 });
 
-router.put('/profile', protect, async (req: AuthRequest, res: Response) => {
+router.put('/profile', protect, async (req: AuthRequest, res: Response): Promise<void> => {
     const userId = req.user!.id;
     const { caloriesTarget, activityLevel } = req.body;
 
@@ -29,7 +30,8 @@ router.put('/profile', protect, async (req: AuthRequest, res: Response) => {
         const user = await User.findById(userId);
 
         if (!user) {
-            return res.status(404).json({ message: 'Utilizatorul nu a fost găsit.' });
+            res.status(404).json({ message: 'Utilizatorul nu a fost găsit.' });
+            return
         }
 
         if (caloriesTarget !== undefined && typeof caloriesTarget === 'number') {

@@ -12,21 +12,24 @@ import { AuthRequest } from '../types';
 
 const router = Router();
 
-router.post('/register', async (req: Request, res: Response) => {
+router.post('/register', async (req: Request, res: Response): Promise<void> => {
   try {
     const { email, password } = req.body;
 
     if (!email || !password) {
-      return res.status(400).json({ message: 'Email și parola sunt obligatorii.' });
+      res.status(400).json({ message: 'Email și parola sunt obligatorii.' });
+      return;
     }
 
     if (password.length < 6) {
-      return res.status(400).json({ message: 'Parola trebuie să aibă minim 6 caractere.' });
+      res.status(400).json({ message: 'Parola trebuie să aibă minim 6 caractere.' });
+      return
     }
 
     const existingUser = await User.findOne({ email });
     if (existingUser) {
-      return res.status(400).json({ message: 'Un utilizator cu acest email există deja.' });
+      res.status(400).json({ message: 'Un utilizator cu acest email există deja.' });
+      return
     }
 
     const user = new User({ email, password });
@@ -51,22 +54,25 @@ router.post('/register', async (req: Request, res: Response) => {
   }
 });
 
-router.post('/login', async (req: Request, res: Response) => {
+router.post('/login', async (req: Request, res: Response): Promise<void> => {
   try {
     const { email, password } = req.body;
 
     if (!email || !password) {
-      return res.status(400).json({ message: 'Email și parola sunt obligatorii.' });
+      res.status(400).json({ message: 'Email și parola sunt obligatorii.' });
+      return;
     }
 
     const user: IUserDocument | null = await User.findOne({ email });
     if (!user) {
-      return res.status(401).json({ message: 'Email sau parolă incorectă.' });
+      res.status(401).json({ message: 'Email sau parolă incorectă.' });
+      return
     }
 
     const isMatch = await user.comparePassword(password);
     if (!isMatch) {
-      return res.status(401).json({ message: 'Email sau parolă incorectă.' });
+      res.status(401).json({ message: 'Email sau parolă incorectă.' });
+      return
     }
 
     const accessToken = generateAccessToken(user._id.toString());
@@ -88,18 +94,20 @@ router.post('/login', async (req: Request, res: Response) => {
   }
 });
 
-router.post('/refresh', async (req: Request, res: Response) => {
+router.post('/refresh', async (req: Request, res: Response): Promise<void> => {
   try {
     const { refreshToken } = req.body;
 
     if (!refreshToken) {
-      return res.status(400).json({ message: 'Refresh token lipsește.' });
+      res.status(400).json({ message: 'Refresh token lipsește.' });
+      return
     }
 
     const userId = await verifyRefreshToken(refreshToken);
 
     if (!userId) {
-      return res.status(401).json({ message: 'Refresh token invalid sau expirat.' });
+      res.status(401).json({ message: 'Refresh token invalid sau expirat.' });
+      return
     }
 
     const newAccessToken = generateAccessToken(userId);
@@ -122,27 +130,22 @@ router.post('/logout', async (req: Request, res: Response) => {
   }
 });
 
-router.get('/verify', protect, async (req: AuthRequest, res: Response) => {
-  try {
-    const userId = req.user!.id;
-    const user = await User.findById(userId).select('-password');
+router.get('/verify', protect, async (req: AuthRequest, res: Response): Promise<void> => {
+  const userId = req.user?.id;
 
-    if (!user) {
-      return res.status(404).json({ message: 'Utilizatorul nu există.' });
-    }
-
-    res.json({
-      valid: true,
-      user: {
-        _id: user._id,
-        email: user.email,
-        caloriesTarget: user.caloriesTarget,
-        activityLevel: user.activityLevel
-      }
-    });
-  } catch (err) {
-    res.status(500).json({ message: 'Eroare la verificare.' });
+  if (!userId) {
+    res.status(401).json({ message: 'Neautorizat.' });
+    return;
   }
+
+  const user = await User.findById(userId);
+  if (!user) {
+    res.status(404).json({ message: 'Utilizatorul nu a fost găsit.' });
+    return;
+  }
+
+  res.json({ message: 'Token valid', user });
 });
+
 
 export default router;

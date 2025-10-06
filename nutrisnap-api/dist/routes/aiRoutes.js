@@ -11,8 +11,10 @@ const router = express_1.default.Router();
 const upload = (0, multer_1.default)({ dest: 'uploads/' });
 const CLARIFAI_API_KEY = process.env.CLARIFAI_API_KEY;
 router.post('/analyze-image', upload.single('foodImage'), async (req, res) => {
-    if (!req.file)
-        return res.status(400).json({ message: 'Niciun fișier primit.' });
+    if (!req.file) {
+        res.status(400).json({ message: 'Niciun fișier primit.' });
+        return;
+    }
     try {
         const imageBytes = fs_1.default.readFileSync(req.file.path);
         const base64Image = imageBytes.toString('base64');
@@ -66,3 +68,4 @@ router.post('/analyze-image', upload.single('foodImage'), async (req, res) => {
     }
 });
 exports.default = router;
+//# sourceMappingURL=aiRoutes.js.map

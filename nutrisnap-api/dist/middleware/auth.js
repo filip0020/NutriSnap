@@ -48,3 +48,4 @@ const protect = async (req, res, next) => {
     }
 };
 exports.default = protect;
+//# sourceMappingURL=auth.js.map

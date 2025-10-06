@@ -12,7 +12,8 @@ router.get('/profile', auth_1.default, async (req, res) => {
     try {
         const user = await User_1.default.findById(userId).select('email caloriesTarget activityLevel');
         if (!user) {
-            return res.status(404).json({ message: 'Utilizatorul nu a fost găsit.' });
+            res.status(404).json({ message: 'Utilizatorul nu a fost găsit.' });
+            return;
         }
         res.status(200).json(user);
     }
@@ -26,7 +27,8 @@ router.put('/profile', auth_1.default, async (req, res) => {
     try {
         const user = await User_1.default.findById(userId);
         if (!user) {
-            return res.status(404).json({ message: 'Utilizatorul nu a fost găsit.' });
+            res.status(404).json({ message: 'Utilizatorul nu a fost găsit.' });
+            return;
         }
         if (caloriesTarget !== undefined && typeof caloriesTarget === 'number') {
             user.caloriesTarget = caloriesTarget;
@@ -46,3 +48,4 @@ router.put('/profile', auth_1.default, async (req, res) => {
     }
 });
 exports.default = router;
+//# sourceMappingURL=userRoutes.js.map

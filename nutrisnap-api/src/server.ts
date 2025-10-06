@@ -19,7 +19,7 @@ const allowedOrigins = [
 ];
 
 app.use(cors({
-  origin: (origin, callback) => {
+  origin: (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
     // Permite requests fără origin (Postman, curl, etc.)
     if (!origin) return callback(null, true);
 

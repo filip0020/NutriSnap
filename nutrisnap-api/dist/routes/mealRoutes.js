@@ -12,7 +12,8 @@ router.post('/', auth_1.default, async (req, res) => {
     const userId = req.user.id;
     const { name, calories, nutrients, entryType, date } = req.body;
     if (!name || !calories || !entryType) {
-        return res.status(400).json({ message: 'Toate câmpurile necesare trebuie completate.' });
+        res.status(400).json({ message: 'Toate câmpurile necesare trebuie completate.' });
+        return;
     }
     try {
         const newMeal = new Meal_1.default({
@@ -56,8 +57,10 @@ router.get('/report', auth_1.default, async (req, res) => {
     }
     try {
         const user = await User_1.default.findById(userId).select('caloriesTarget activityLevel');
-        if (!user)
-            return res.status(404).json({ message: 'Utilizatorul nu a fost găsit.' });
+        if (!user) {
+            res.status(404).json({ message: 'Utilizatorul nu a fost găsit.' });
+            return;
+        }
         const { caloriesTarget, activityLevel } = user;
         const meals = await Meal_1.default.find({
             userId: userId,
@@ -98,3 +101,4 @@ router.get('/report', auth_1.default, async (req, res) => {
     }
 });
 exports.default = router;
+//# sourceMappingURL=mealRoutes.js.map
