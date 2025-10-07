@@ -1,7 +1,8 @@
 import axios from 'axios';
 import type { AxiosInstance, AxiosError, InternalAxiosRequestConfig } from 'axios';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+// ✅ Șterge /api de la final
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 
 console.log('🔵 API_URL configurat:', API_URL);
 

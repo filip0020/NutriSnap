@@ -18,23 +18,31 @@ const allowedOrigins = [
   'http://localhost:3000'               // ✅ Dev alt port
 ];
 
-// === CORS configuration ===
+// === CORS configuration (FIXED) ===
 const corsOptions: cors.CorsOptions = {
   origin: (origin, callback) => {
-    if (!origin) return callback(null, true); // server-to-server / Postman
+    // ✅ Permite requests fără origin (Postman, server-to-server, preflight)
+    if (!origin) return callback(null, true);
+
     if (allowedOrigins.includes(origin)) {
       return callback(null, true);
     }
+
     console.log('❌ Origin blocat:', origin);
     return callback(new Error('CORS not allowed'));
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+  // ✅ IMPORTANT: Expune headerele pentru frontend
+  exposedHeaders: ['Authorization'],
+  // ✅ Cache preflight pentru 1 oră
+  maxAge: 3600
 };
 
-app.use(cors(corsOptions)); // ✅ aplicăm regula completă
-app.options('*', cors(corsOptions)); // ✅ pentru preflight
+// ✅ Aplică CORS ÎNAINTEA oricăror alte middleware-uri
+app.use(cors(corsOptions));
+app.options('*', cors(corsOptions)); // Handle preflight
 
 // === Body parsers ===
 app.use(express.json());
@@ -42,7 +50,7 @@ app.use(express.urlencoded({ extended: true }));
 
 // === Logging ===
 app.use((req: Request, res: Response, next: NextFunction) => {
-  console.log(`📨 ${req.method} ${req.path} - Origin: ${req.headers.origin || 'unknown'}`);
+  console.log(`📨 ${req.method} ${req.path} - Origin: ${req.headers.origin || 'no-origin'}`);
   next();
 });
 
@@ -53,7 +61,7 @@ const connectDB = async (): Promise<void> => {
     console.log('✅ MongoDB conectat');
   } catch (err) {
     console.error('❌ Eroare MongoDB:', err);
-    console.log('🔁 Reîncercare în 5 secunde...');
+    console.log('🔄 Reîncercare în 5 secunde...');
     setTimeout(connectDB, 5000);
   }
 };
@@ -111,7 +119,7 @@ app.use((err: Error, req: Request, res: Response, next: NextFunction) => {
 // === Start server ===
 const server = app.listen(PORT, () => {
   console.log(`🚀 Server pornit pe port: ${PORT}`);
-  console.log(`📍 Frontend permis: ${allowedOrigins.join(', ')}`);
+  console.log(`🔒 Frontend permis: ${allowedOrigins.join(', ')}`);
   console.log(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
 });
 
