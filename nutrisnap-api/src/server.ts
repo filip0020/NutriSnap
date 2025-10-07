@@ -1,7 +1,7 @@
 import 'dotenv/config';
 import express, { Request, Response, NextFunction } from 'express';
 import mongoose from 'mongoose';
-import cors, { CorsOptionsDelegate } from 'cors';
+import cors from 'cors';
 
 import authRoutes from './routes/authRoutes';
 import mealRoutes from './routes/mealRoutes';
@@ -19,13 +19,11 @@ const allowedOrigins = [
 
 const corsOptions: cors.CorsOptions = {
   origin: (origin, callback) => {
-    if (!origin) return callback(null, true);
-    if (allowedOrigins.includes(origin)) {
-      callback(null, true);
-    } else {
-      console.log('❌ Origin blocat:', origin);
-      callback(new Error('CORS not allowed'));
-    }
+    // Acceptă cereri fără origin (ex: Postman)
+    if (!origin || allowedOrigins.includes(origin)) return callback(null, true);
+    // Dacă originul nu e permis, respinge fără eroare server 500
+    console.log('❌ Origin blocat:', origin);
+    return callback(null, false);
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
@@ -34,10 +32,9 @@ const corsOptions: cors.CorsOptions = {
   maxAge: 86400
 };
 
+// Middleware CORS
 app.use(cors(corsOptions));
 app.options('*', cors(corsOptions));
-
-app.options('*', cors());
 
 app.use((req: Request, res: Response, next: NextFunction) => {
   console.log(`📨 ${req.method} ${req.path} - Origin: ${req.headers.origin || 'unknown'}`);
