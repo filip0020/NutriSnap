@@ -44,7 +44,6 @@ app.use((req: Request, res: Response, next: NextFunction) => {
   next();
 });
 
-// Body parsers
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
@@ -61,13 +60,11 @@ const connectDB = async (): Promise<void> => {
 
 connectDB();
 
-// ✅ Rute principale
 app.use('/api/auth', authRoutes);
 app.use('/api/meals', mealRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/ai', aiRoutes);
 
-// ✅ Endpoint de test simplu
 app.get('/', (req: Request, res: Response) => {
   res.json({
     message: 'NutriSnap API 🚀',
@@ -82,7 +79,6 @@ app.get('/', (req: Request, res: Response) => {
   });
 });
 
-// ✅ Endpoint healthcheck (pentru Render)
 app.get('/health', (req: Request, res: Response) => {
   res.json({
     status: 'OK',
@@ -92,7 +88,6 @@ app.get('/health', (req: Request, res: Response) => {
   });
 });
 
-// 404 fallback
 app.use((req: Request, res: Response) => {
   res.status(404).json({
     message: 'Ruta nu există',
@@ -102,7 +97,6 @@ app.use((req: Request, res: Response) => {
   });
 });
 
-// Eroare globală
 app.use((err: Error, req: Request, res: Response, next: NextFunction) => {
   console.error('❌ Eroare server:', err);
   res.status(500).json({
@@ -117,7 +111,6 @@ const server = app.listen(PORT, () => {
   console.log(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
 });
 
-// Închidere sigură (Render face SIGTERM la redeploy)
 process.on('SIGTERM', async () => {
   console.log('🛑 SIGTERM - Închid serverul...');
   server.close(async () => {
