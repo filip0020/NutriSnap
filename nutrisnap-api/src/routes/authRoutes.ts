@@ -1,151 +1,294 @@
-import { Router, Response } from 'express';
-import User, { IUserDocument } from '../models/User';
+import { Router, Request, Response } from 'express';
+import User, { IUserDocument, AuthRequest } from '../models/User';
 import {
   generateAccessToken,
   generateRefreshToken,
   verifyRefreshToken,
-  revokeRefreshToken
+  revokeRefreshToken,
+  revokeAllUserTokens
 } from '../utils/tokenUtils';
 import protect from '../middleware/auth';
-import { AuthRequest } from '../models/User';
 
 const router = Router();
 
-interface RegisterBody { email: string; password: string; }
-interface LoginBody { email: string; password: string; }
-interface RefreshBody { refreshToken: string; }
+// Register
+router.post('/register', async (req: Request, res: Response): Promise<void> => {
+  const { email, password } = req.body;
 
-router.post('/register', async (req: AuthRequest<RegisterBody>, res: Response): Promise<void> => {
+  if (!email || !password) {
+    res.status(400).json({ message: 'Email și parola sunt obligatorii' });
+    return;
+  }
+
+  if (password.length < 6) {
+    res.status(400).json({ message: 'Parola trebuie să aibă minim 6 caractere' });
+    return;
+  }
+
   try {
-    const { email, password } = req.body;
-
-    if (!email || !password) {
-      res.status(400).json({ message: 'Email și parola sunt obligatorii.' });
-      return;
-    }
-
-    if (password.length < 6) {
-      res.status(400).json({ message: 'Parola trebuie să aibă minim 6 caractere.' });
-      return;
-    }
-
+    // Verificăm dacă utilizatorul există deja
     const existingUser = await User.findOne({ email });
     if (existingUser) {
-      res.status(400).json({ message: 'Un utilizator cu acest email există deja.' });
+      res.status(400).json({ message: 'Email-ul este deja înregistrat' });
       return;
     }
 
-    const user = new User({ email, password });
+    // Creăm utilizatorul nou
+    const user: IUserDocument = new User({
+      email,
+      password,
+      caloriesTarget: 2000,
+      activityLevel: 0
+    });
+
     await user.save();
 
+    // Generăm tokene
     const accessToken = generateAccessToken(user._id.toString());
     const refreshToken = await generateRefreshToken(user._id.toString());
+
+    console.log('✅ Utilizator înregistrat:', email);
 
     res.status(201).json({
+      accessToken,
+      refreshToken,
       user: {
-        _id: user._id,
+        id: user._id,
         email: user.email,
         caloriesTarget: user.caloriesTarget,
         activityLevel: user.activityLevel
-      },
-      accessToken,
-      refreshToken
+      }
     });
-  } catch (err) {
-    console.error('Eroare register:', err);
-    res.status(500).json({ message: 'Eroare de server.' });
+  } catch (error: any) {
+    console.error('❌ Eroare înregistrare:', error);
+    res.status(500).json({ message: 'Eroare la înregistrare' });
   }
 });
 
-router.post('/login', async (req: AuthRequest<LoginBody>, res: Response): Promise<void> => {
+// Login
+router.post('/login', async (req: Request, res: Response): Promise<void> => {
+  const { email, password } = req.body;
+
+  if (!email || !password) {
+    res.status(400).json({ message: 'Email și parola sunt obligatorii' });
+    return;
+  }
+
   try {
-    const { email, password } = req.body;
-
-    if (!email || !password) {
-      res.status(400).json({ message: 'Email și parola sunt obligatorii.' });
-      return;
-    }
-
-    const user: IUserDocument | null = await User.findOne({ email });
+    // Găsim utilizatorul
+    const user = await User.findOne({ email });
     if (!user) {
-      res.status(401).json({ message: 'Email sau parolă incorectă.' });
+      res.status(401).json({ message: 'Email sau parolă incorectă' });
       return;
     }
 
-    const isMatch = await user.comparePassword(password);
-    if (!isMatch) {
-      res.status(401).json({ message: 'Email sau parolă incorectă.' });
+    // Verificăm parola
+    const isPasswordValid = await user.comparePassword(password);
+    if (!isPasswordValid) {
+      res.status(401).json({ message: 'Email sau parolă incorectă' });
       return;
     }
 
+    // Generăm tokene
     const accessToken = generateAccessToken(user._id.toString());
     const refreshToken = await generateRefreshToken(user._id.toString());
 
-    res.json({
+    console.log('✅ Login reușit:', email);
+
+    res.status(200).json({
+      accessToken,
+      refreshToken,
       user: {
-        _id: user._id,
+        id: user._id,
         email: user.email,
         caloriesTarget: user.caloriesTarget,
         activityLevel: user.activityLevel
-      },
-      accessToken,
-      refreshToken
+      }
     });
-  } catch (err) {
-    console.error('Eroare login:', err);
-    res.status(500).json({ message: 'Eroare de server.' });
+  } catch (error: any) {
+    console.error('❌ Eroare login:', error);
+    res.status(500).json({ message: 'Eroare la autentificare' });
   }
 });
 
-router.post('/refresh', async (req: AuthRequest<RefreshBody>, res: Response): Promise<void> => {
+// Verify Token - endpoint nou pentru verificarea token-ului
+router.get('/verify', protect, async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const { refreshToken } = req.body;
-    if (!refreshToken) {
-      res.status(400).json({ message: 'Refresh token lipsește.' });
+    const userId = req.user!.id;
+
+    const user = await User.findById(userId).select('-password');
+    if (!user) {
+      res.status(404).json({ message: 'Utilizatorul nu a fost găsit' });
       return;
     }
 
+    console.log('✅ Token verificat pentru:', user.email);
+
+    res.status(200).json({
+      user: {
+        id: user._id,
+        email: user.email,
+        caloriesTarget: user.caloriesTarget,
+        activityLevel: user.activityLevel
+      }
+    });
+  } catch (error: any) {
+    console.error('❌ Eroare verificare token:', error);
+    res.status(401).json({ message: 'Token invalid' });
+  }
+});
+
+// Refresh Token
+router.post('/refresh', async (req: Request, res: Response): Promise<void> => {
+  const { refreshToken } = req.body;
+
+  if (!refreshToken) {
+    res.status(400).json({ message: 'Refresh token lipsește' });
+    return;
+  }
+
+  try {
+    // Verificăm refresh token-ul
     const userId = await verifyRefreshToken(refreshToken);
     if (!userId) {
-      res.status(401).json({ message: 'Refresh token invalid sau expirat.' });
+      res.status(401).json({ message: 'Refresh token invalid sau expirat' });
       return;
     }
 
-    const newAccessToken = generateAccessToken(userId);
-    res.json({ accessToken: newAccessToken });
-  } catch (err) {
-    console.error('Eroare refresh:', err);
-    res.status(500).json({ message: 'Eroare la reîmprospătare.' });
-  }
-});
-
-router.post('/logout', async (req: AuthRequest<{ refreshToken?: string }>, res: Response) => {
-  try {
-    const { refreshToken } = req.body;
-    if (refreshToken) {
-      await revokeRefreshToken(refreshToken);
+    // Verificăm că utilizatorul există încă
+    const user = await User.findById(userId);
+    if (!user) {
+      res.status(404).json({ message: 'Utilizatorul nu a fost găsit' });
+      return;
     }
-    res.json({ message: 'Logout realizat cu succes.' });
-  } catch (err) {
-    res.status(500).json({ message: 'Eroare la logout.' });
+
+    // Generăm un nou access token
+    const newAccessToken = generateAccessToken(userId);
+
+    console.log('✅ Token refreshed pentru:', user.email);
+
+    res.status(200).json({
+      accessToken: newAccessToken
+    });
+  } catch (error: any) {
+    console.error('❌ Eroare refresh token:', error);
+    res.status(500).json({ message: 'Eroare la refresh token' });
   }
 });
 
-router.get('/verify', protect, async (req: AuthRequest, res: Response): Promise<void> => {
-  const userId = req.user?.id;
+// Logout
+router.post('/logout', async (req: Request, res: Response): Promise<void> => {
+  const { refreshToken } = req.body;
 
-  if (!userId) {
-    res.status(401).json({ message: 'Neautorizat.' });
+  if (!refreshToken) {
+    res.status(400).json({ message: 'Refresh token lipsește' });
     return;
   }
 
-  const user = await User.findById(userId);
-  if (!user) {
-    res.status(404).json({ message: 'Utilizatorul nu a fost găsit.' });
-    return;
-  }
+  try {
+    // Revocăm refresh token-ul
+    const revoked = await revokeRefreshToken(refreshToken);
 
-  res.json({ message: 'Token valid', user });
+    if (revoked) {
+      console.log('✅ Logout reușit');
+      res.status(200).json({ message: 'Logout reușit' });
+    } else {
+      res.status(404).json({ message: 'Refresh token nu a fost găsit' });
+    }
+  } catch (error: any) {
+    console.error('❌ Eroare logout:', error);
+    res.status(500).json({ message: 'Eroare la logout' });
+  }
+});
+
+// Logout All Devices - revocă toate token-urile utilizatorului
+router.post('/logout-all', protect, async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const userId = req.user!.id;
+
+    await revokeAllUserTokens(userId);
+
+    console.log('✅ Logout all devices pentru user:', userId);
+    res.status(200).json({ message: 'Logout de pe toate dispozitivele reușit' });
+  } catch (error: any) {
+    console.error('❌ Eroare logout all:', error);
+    res.status(500).json({ message: 'Eroare la logout' });
+  }
+});
+
+// Update Profile
+router.put('/profile', protect, async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const userId = req.user!.id;
+    const { caloriesTarget, activityLevel } = req.body;
+
+    const updateData: any = {};
+    if (caloriesTarget !== undefined) {
+      if (caloriesTarget < 1000 || caloriesTarget > 5000) {
+        res.status(400).json({ message: 'Ținta de calorii trebuie să fie între 1000 și 5000' });
+        return;
+      }
+      updateData.caloriesTarget = caloriesTarget;
+    }
+
+    if (activityLevel !== undefined) {
+      if (activityLevel < 0 || activityLevel > 1000) {
+        res.status(400).json({ message: 'Nivelul de activitate invalid' });
+        return;
+      }
+      updateData.activityLevel = activityLevel;
+    }
+
+    const user = await User.findByIdAndUpdate(
+      userId,
+      updateData,
+      { new: true, runValidators: true }
+    ).select('-password');
+
+    if (!user) {
+      res.status(404).json({ message: 'Utilizatorul nu a fost găsit' });
+      return;
+    }
+
+    console.log('✅ Profil actualizat pentru:', user.email);
+
+    res.status(200).json({
+      user: {
+        id: user._id,
+        email: user.email,
+        caloriesTarget: user.caloriesTarget,
+        activityLevel: user.activityLevel
+      }
+    });
+  } catch (error: any) {
+    console.error('❌ Eroare actualizare profil:', error);
+    res.status(500).json({ message: 'Eroare la actualizarea profilului' });
+  }
+});
+
+// Get Profile
+router.get('/profile', protect, async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const userId = req.user!.id;
+
+    const user = await User.findById(userId).select('-password');
+    if (!user) {
+      res.status(404).json({ message: 'Utilizatorul nu a fost găsit' });
+      return;
+    }
+
+    res.status(200).json({
+      user: {
+        id: user._id,
+        email: user.email,
+        caloriesTarget: user.caloriesTarget,
+        activityLevel: user.activityLevel
+      }
+    });
+  } catch (error: any) {
+    console.error('❌ Eroare get profile:', error);
+    res.status(500).json({ message: 'Eroare la obținerea profilului' });
+  }
 });
 
 export default router;

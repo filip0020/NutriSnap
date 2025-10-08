@@ -1,134 +1,171 @@
-import 'dotenv/config';
-import express, { Request, Response, NextFunction } from 'express';
-import mongoose from 'mongoose';
+import express, { Application, Request, Response } from 'express';
 import cors from 'cors';
+import dotenv from 'dotenv';
+import mongoose from 'mongoose';
+import path from 'path';
+import fs from 'fs';
 
+// Import routes
 import authRoutes from './routes/authRoutes';
 import mealRoutes from './routes/mealRoutes';
-import userRoutes from './routes/userRoutes';
 import aiRoutes from './routes/aiRoutes';
 
-const app = express();
+// Load environment variables
+dotenv.config();
+
+const app: Application = express();
 const PORT = process.env.PORT || 5000;
 
-// === Allowed frontend origins ===
-const allowedOrigins = [
-  'https://nutri-snap-two.vercel.app', // ✅ Vercel
-  'http://localhost:5173',              // ✅ Dev
-  'http://localhost:3000'               // ✅ Dev alt port
-];
+// Verifică și creează folderul uploads dacă nu există
+const uploadsDir = path.join(__dirname, '../uploads');
+if (!fs.existsSync(uploadsDir)) {
+  fs.mkdirSync(uploadsDir, { recursive: true });
+  console.log('📁 Folder uploads creat');
+}
 
-// === CORS configuration (FIXED) ===
-const corsOptions: cors.CorsOptions = {
+// CORS Configuration
+const allowedOrigins = [
+  process.env.FRONTEND_URL,
+  'http://localhost:3000',
+  'http://localhost:5173',
+  'https://your-app.vercel.app' // Înlocuiește cu URL-ul tău de pe Vercel
+].filter(Boolean);
+
+app.use(cors({
   origin: (origin, callback) => {
-    // ✅ Permite requests fără origin (Postman, server-to-server, preflight)
+    // Allow requests with no origin (mobile apps, Postman, etc.)
     if (!origin) return callback(null, true);
 
     if (allowedOrigins.includes(origin)) {
-      return callback(null, true);
+      callback(null, true);
+    } else {
+      console.warn('⚠️ CORS blocked origin:', origin);
+      callback(null, true); // În producție, schimbă cu: callback(new Error('Not allowed by CORS'))
     }
-
-    console.log('❌ Origin blocat:', origin);
-    return callback(new Error('CORS not allowed'));
   },
   credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
-  // ✅ IMPORTANT: Expune headerele pentru frontend
-  exposedHeaders: ['Authorization'],
-  // ✅ Cache preflight pentru 1 oră
-  maxAge: 3600
-};
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+}));
 
-// ✅ Aplică CORS ÎNAINTEA oricăror alte middleware-uri
-app.use(cors(corsOptions));
-app.options('*', cors(corsOptions)); // Handle preflight
+// Middleware
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
-// === Body parsers ===
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
-
-// === Logging ===
-app.use((req: Request, res: Response, next: NextFunction) => {
-  console.log(`📨 ${req.method} ${req.path} - Origin: ${req.headers.origin || 'no-origin'}`);
+// Logging middleware
+app.use((req: Request, res: Response, next) => {
+  const timestamp = new Date().toISOString();
+  console.log(`[${timestamp}] ${req.method} ${req.path}`);
   next();
 });
 
-// === MongoDB ===
-const connectDB = async (): Promise<void> => {
-  try {
-    await mongoose.connect(process.env.MONGO_URI!);
-    console.log('✅ MongoDB conectat');
-  } catch (err) {
-    console.error('❌ Eroare MongoDB:', err);
-    console.log('🔄 Reîncercare în 5 secunde...');
-    setTimeout(connectDB, 5000);
-  }
-};
-connectDB();
-
-// === Routes ===
-app.use('/auth', authRoutes);
-app.use('/meals', mealRoutes);
-app.use('/users', userRoutes);
-app.use('/ai', aiRoutes);
-
-// === Health & root ===
-app.get('/', (req: Request, res: Response) => {
-  res.json({
-    message: 'NutriSnap API 🚀',
-    version: '1.0.0',
-    environment: process.env.NODE_ENV || 'development',
-    endpoints: {
-      auth: '/auth',
-      meals: '/meals',
-      users: '/users',
-      ai: '/ai'
-    }
-  });
-});
-
+// Health check endpoint
 app.get('/health', (req: Request, res: Response) => {
   res.json({
-    status: 'OK',
-    database: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected',
+    status: 'ok',
     timestamp: new Date().toISOString(),
-    uptime: process.uptime()
+    environment: process.env.NODE_ENV,
+    mongodb: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected'
   });
 });
 
-// === 404 handler ===
+// API Routes
+app.use('/auth', authRoutes);
+app.use('/meals', mealRoutes);
+app.use('/ai', aiRoutes);
+
+// 404 Handler
 app.use((req: Request, res: Response) => {
+  console.warn('❌ 404 Not Found:', req.method, req.path);
   res.status(404).json({
-    message: 'Ruta nu există',
+    message: 'Route not found',
     path: req.path,
-    method: req.method,
-    hint: 'Verifică dacă URL-ul este corect'
+    method: req.method
   });
 });
 
-// === Error handler ===
-app.use((err: Error, req: Request, res: Response, next: NextFunction) => {
-  console.error('❌ Eroare server:', err);
-  res.status(500).json({
-    message: 'Eroare server',
-    error: process.env.NODE_ENV === 'production' ? 'Internal Server Error' : err.message
+// Error Handler
+app.use((error: any, req: Request, res: Response, next: any) => {
+  console.error('❌ Server Error:', error);
+  res.status(error.status || 500).json({
+    message: error.message || 'Internal server error',
+    ...(process.env.NODE_ENV === 'development' && { stack: error.stack })
   });
 });
 
-// === Start server ===
-const server = app.listen(PORT, () => {
-  console.log(`🚀 Server pornit pe port: ${PORT}`);
-  console.log(`🔒 Frontend permis: ${allowedOrigins.join(', ')}`);
-  console.log(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
-});
+// MongoDB Connection
+const connectDB = async () => {
+  try {
+    const mongoURI = process.env.MONGODB_URI;
 
+    if (!mongoURI) {
+      throw new Error('MONGODB_URI nu este definit în environment variables');
+    }
+
+    await mongoose.connect(mongoURI);
+    console.log('✅ MongoDB conectat cu succes');
+
+    // Log database name
+    const dbName = mongoose.connection.db?.databaseName;
+    console.log('📊 Database:', dbName);
+
+  } catch (error: any) {
+    console.error('❌ Eroare conectare MongoDB:', error.message);
+    process.exit(1);
+  }
+};
+
+// Start server
+const startServer = async () => {
+  try {
+    await connectDB();
+
+    app.listen(PORT, () => {
+      console.log('🚀 Server pornit pe portul:', PORT);
+      console.log('🌍 Environment:', process.env.NODE_ENV || 'development');
+      console.log('🔑 JWT Secret configurat:', !!process.env.JWT_SECRET);
+      console.log('🤖 Clarifai API configurată:', !!(process.env.CLARIFAI_API_KEY || process.env.CLARIFAI_PAT));
+      console.log('📡 CORS origins:', allowedOrigins);
+      console.log('---');
+      console.log('Endpoints disponibile:');
+      console.log('  GET  /health');
+      console.log('  POST /auth/register');
+      console.log('  POST /auth/login');
+      console.log('  POST /auth/refresh');
+      console.log('  POST /auth/logout');
+      console.log('  GET  /auth/verify');
+      console.log('  POST /meals');
+      console.log('  GET  /meals/report');
+      console.log('  POST /ai/analyze-image');
+      console.log('  GET  /ai/health');
+      console.log('---');
+    });
+
+  } catch (error) {
+    console.error('❌ Eroare la pornirea serverului:', error);
+    process.exit(1);
+  }
+};
+
+// Graceful shutdown
 process.on('SIGTERM', async () => {
-  console.log('🛑 SIGTERM - Închid serverul...');
-  server.close(async () => {
-    await mongoose.connection.close();
-    process.exit(0);
-  });
+  console.log('⚠️ SIGTERM primit, închidere graceful...');
+  await mongoose.connection.close();
+  process.exit(0);
 });
+
+process.on('SIGINT', async () => {
+  console.log('⚠️ SIGINT primit, închidere graceful...');
+  await mongoose.connection.close();
+  process.exit(0);
+});
+
+// Handle unhandled promise rejections
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('❌ Unhandled Rejection:', reason);
+});
+
+// Start the server
+startServer();
 
 export default app;

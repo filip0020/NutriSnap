@@ -1,7 +1,7 @@
 import axios from 'axios';
 import type { AxiosInstance, AxiosError, InternalAxiosRequestConfig } from 'axios';
 
-// ✅ Șterge /api de la final
+// ✅ Configurare corectă API URL
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 
 console.log('🔵 API_URL configurat:', API_URL);
@@ -21,7 +21,12 @@ apiClient.interceptors.request.use(
     }
     const url = config.baseURL && config.url ? `${config.baseURL}${config.url}` : config.url || 'unknown';
     console.log('📤 Request către:', url);
+    console.log('🔑 Token prezent:', !!accessToken);
     return config;
+  },
+  (error) => {
+    console.error('❌ Eroare request interceptor:', error);
+    return Promise.reject(error);
   }
 );
 
@@ -40,11 +45,27 @@ const processQueue = (error: any, token: string | null = null) => {
 };
 
 apiClient.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    console.log('✅ Response success:', response.config.url);
+    return response;
+  },
   async (error: AxiosError) => {
     const originalRequest: any = error.config;
 
+    console.error('❌ Response error:', {
+      url: originalRequest?.url,
+      status: error.response?.status,
+      message: error.message
+    });
+
+    // Nu este eroare 401 sau am încercat deja refresh
     if (error.response?.status !== 401 || originalRequest._retry) {
+      return Promise.reject(error);
+    }
+
+    // Dacă suntem pe endpoint-ul de login/register, nu încercăm refresh
+    if (originalRequest.url?.includes('/auth/login') ||
+      originalRequest.url?.includes('/auth/register')) {
       return Promise.reject(error);
     }
 
@@ -60,16 +81,19 @@ apiClient.interceptors.response.use(
     const refreshToken = localStorage.getItem('refreshToken');
 
     if (!refreshToken) {
+      console.warn('⚠️ Nu există refresh token, redirecționare către login');
       localStorage.clear();
       window.location.href = '/login';
       return Promise.reject(error);
     }
 
     try {
+      console.log('🔄 Încercare refresh token...');
       const response = await axios.post(`${API_URL}/auth/refresh`, { refreshToken });
       const { accessToken } = response.data;
 
       localStorage.setItem('accessToken', accessToken);
+      console.log('✅ Token refreshed cu succes');
 
       if (originalRequest.headers) {
         originalRequest.headers.Authorization = `Bearer ${accessToken}`;
@@ -78,6 +102,7 @@ apiClient.interceptors.response.use(
       processQueue(null, accessToken);
       return apiClient(originalRequest);
     } catch (refreshError) {
+      console.error('❌ Eroare la refresh token:', refreshError);
       processQueue(refreshError, null);
       localStorage.clear();
       window.location.href = '/login';

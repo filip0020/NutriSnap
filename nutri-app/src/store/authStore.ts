@@ -1,128 +1,209 @@
 import { defineStore } from 'pinia';
-import apiClient from '../utils/apiClient';
+import { ref, computed } from 'vue';
+import apiClient from '@/utils/apiClient';
+import router from '@/router';
 
 interface User {
-  _id: string;
+  id: string;
   email: string;
   caloriesTarget: number;
   activityLevel: number;
 }
 
-export const useAuthStore = defineStore('auth', {
-  state: () => ({
-    user: null as User | null,
-    accessToken: localStorage.getItem('accessToken'),
-    refreshToken: localStorage.getItem('refreshToken'),
-    isAuthenticated: false,
-    loading: false,
-  }),
+interface LoginResponse {
+  accessToken: string;
+  refreshToken: string;
+  user: User;
+}
 
-  actions: {
-    async initialize() {
-      const token = localStorage.getItem('accessToken');
-      const userStr = localStorage.getItem('user');
+export const useAuthStore = defineStore('auth', () => {
+  const user = ref<User | null>(null);
+  const loading = ref(false);
+  const error = ref<string | null>(null);
 
-      if (token && userStr) {
-        this.accessToken = token;
-        this.user = JSON.parse(userStr);
-        this.isAuthenticated = true;
+  const isAuthenticated = computed(() => {
+    const hasToken = !!localStorage.getItem('accessToken');
+    const hasUser = !!user.value;
+    return hasToken && hasUser;
+  });
 
-        try {
-          await this.verifyToken();
-        } catch {
-          this.logout();
-        }
-      }
-    },
+  // Initialize - verifică dacă utilizatorul este deja autentificat
+  const initialize = async () => {
+    const accessToken = localStorage.getItem('accessToken');
+    const refreshToken = localStorage.getItem('refreshToken');
 
-    async register(email: string, password: string) {
-      this.loading = true;
-      try {
-        // ✅ Folosește apiClient în loc de axios direct
-        const response = await apiClient.post('/auth/register', {
-          email,
-          password
-        });
-
-        this.user = response.data.user;
-        this.accessToken = response.data.accessToken;
-        this.refreshToken = response.data.refreshToken;
-        this.isAuthenticated = true;
-
-        localStorage.setItem('accessToken', response.data.accessToken);
-        localStorage.setItem('refreshToken', response.data.refreshToken);
-        localStorage.setItem('user', JSON.stringify(response.data.user));
-
-        return response.data;
-      } catch (error: any) {
-        console.error('❌ Eroare înregistrare:', error.response?.data || error.message);
-        throw error.response?.data || { message: 'Eroare la înregistrare' };
-      } finally {
-        this.loading = false;
-      }
-    },
-
-    async login(email: string, password: string) {
-      this.loading = true;
-      try {
-        // ✅ Folosește apiClient în loc de axios direct
-        const response = await apiClient.post('/auth/login', {
-          email,
-          password
-        });
-
-        this.user = response.data.user;
-        this.accessToken = response.data.accessToken;
-        this.refreshToken = response.data.refreshToken;
-        this.isAuthenticated = true;
-
-        localStorage.setItem('accessToken', response.data.accessToken);
-        localStorage.setItem('refreshToken', response.data.refreshToken);
-        localStorage.setItem('user', JSON.stringify(response.data.user));
-
-        return response.data;
-      } catch (error: any) {
-        console.error('❌ Eroare login:', error.response?.data || error.message);
-        throw error.response?.data || { message: 'Eroare la autentificare' };
-      } finally {
-        this.loading = false;
-      }
-    },
-
-    async logout() {
-      try {
-        if (this.refreshToken) {
-          await apiClient.post('/auth/logout', { refreshToken: this.refreshToken });
-        }
-      } catch (error) {
-        console.error('Eroare la logout:', error);
-      } finally {
-        this.user = null;
-        this.accessToken = null;
-        this.refreshToken = null;
-        this.isAuthenticated = false;
-        localStorage.clear();
-      }
-    },
-
-    async verifyToken() {
-      try {
-        const response = await apiClient.get('/auth/verify');
-        if (response.data.valid) {
-          this.user = response.data.user;
-          this.isAuthenticated = true;
-          localStorage.setItem('user', JSON.stringify(response.data.user));
-        }
-        return response.data;
-      } catch {
-        this.logout();
-        return null;
-      }
+    if (!accessToken || !refreshToken) {
+      console.log('ℹ️ Nu există tokene salvate');
+      return;
     }
-  },
 
-  getters: {
-    isLoggedIn: (state) => state.isAuthenticated,
-    currentUser: (state) => state.user,
-  },
+    console.log('🔄 Verificare token existent...');
+    loading.value = true;
+
+    try {
+      // Verificăm dacă token-ul este valid
+      const response = await apiClient.get<{ user: User }>('/auth/verify');
+      user.value = response.data.user;
+      console.log('✅ Utilizator autentificat:', user.value.email);
+    } catch (err: any) {
+      console.warn('⚠️ Token invalid sau expirat');
+      // Token invalid - curățăm storage-ul
+      localStorage.removeItem('accessToken');
+      localStorage.removeItem('refreshToken');
+      user.value = null;
+
+      // Dacă suntem pe o pagină protejată, redirecționăm la login
+      const currentPath = window.location.pathname;
+      if (currentPath !== '/login' && currentPath !== '/register') {
+        router.push('/login');
+      }
+    } finally {
+      loading.value = false;
+    }
+  };
+
+  // Login
+  const login = async (email: string, password: string) => {
+    loading.value = true;
+    error.value = null;
+
+    try {
+      console.log('📤 Încercare login pentru:', email);
+
+      const response = await apiClient.post<LoginResponse>('/auth/login', {
+        email,
+        password
+      });
+
+      const { accessToken, refreshToken, user: userData } = response.data;
+
+      // Salvăm tokenele
+      localStorage.setItem('accessToken', accessToken);
+      localStorage.setItem('refreshToken', refreshToken);
+
+      // Setăm user-ul
+      user.value = userData;
+
+      console.log('✅ Login reușit:', userData.email);
+
+      // Redirecționăm la home
+      router.push('/');
+
+      return true;
+    } catch (err: any) {
+      console.error('❌ Eroare login:', err);
+      error.value = err.response?.data?.message || 'Eroare la autentificare';
+      return false;
+    } finally {
+      loading.value = false;
+    }
+  };
+
+  // Register
+  const register = async (email: string, password: string) => {
+    loading.value = true;
+    error.value = null;
+
+    try {
+      console.log('📤 Încercare înregistrare pentru:', email);
+
+      const response = await apiClient.post<LoginResponse>('/auth/register', {
+        email,
+        password
+      });
+
+      const { accessToken, refreshToken, user: userData } = response.data;
+
+      // Salvăm tokenele
+      localStorage.setItem('accessToken', accessToken);
+      localStorage.setItem('refreshToken', refreshToken);
+
+      // Setăm user-ul
+      user.value = userData;
+
+      console.log('✅ Înregistrare reușită:', userData.email);
+
+      // Redirecționăm la home
+      router.push('/');
+
+      return true;
+    } catch (err: any) {
+      console.error('❌ Eroare înregistrare:', err);
+      error.value = err.response?.data?.message || 'Eroare la înregistrare';
+      return false;
+    } finally {
+      loading.value = false;
+    }
+  };
+
+  // Logout
+  const logout = async () => {
+    loading.value = true;
+
+    try {
+      const refreshToken = localStorage.getItem('refreshToken');
+
+      if (refreshToken) {
+        // Încercăm să invalidăm token-ul pe server
+        try {
+          await apiClient.post('/auth/logout', { refreshToken });
+          console.log('✅ Logout server reușit');
+        } catch (err) {
+          console.warn('⚠️ Eroare logout server (continuăm cu logout local)');
+        }
+      }
+    } finally {
+      // Curățăm storage-ul și state-ul local indiferent de rezultat
+      localStorage.removeItem('accessToken');
+      localStorage.removeItem('refreshToken');
+      user.value = null;
+      loading.value = false;
+
+      console.log('✅ Logout local complet');
+      router.push('/login');
+    }
+  };
+
+  // Update user profile
+  const updateProfile = async (data: Partial<User>) => {
+    loading.value = true;
+    error.value = null;
+
+    try {
+      console.log('📤 Actualizare profil:', data);
+
+      const response = await apiClient.put<{ user: User }>('/auth/profile', data);
+      user.value = response.data.user;
+
+      console.log('✅ Profil actualizat');
+      return true;
+    } catch (err: any) {
+      console.error('❌ Eroare actualizare profil:', err);
+      error.value = err.response?.data?.message || 'Eroare la actualizarea profilului';
+      return false;
+    } finally {
+      loading.value = false;
+    }
+  };
+
+  // Clear error
+  const clearError = () => {
+    error.value = null;
+  };
+
+  return {
+    // State
+    user,
+    loading,
+    error,
+    isAuthenticated,
+
+    // Actions
+    initialize,
+    login,
+    register,
+    logout,
+    updateProfile,
+    clearError
+  };
 });
