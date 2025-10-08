@@ -6,6 +6,9 @@
 # Fișiere de build
 /nutri-app/dist
 /nutrisnap-api/dist
+/nutrisnap-api/.env
+/nutrisnap-api/.env.production
+
 
 # Fișiere temporare și cache
 .DS_Store
