@@ -1,0 +1,16 @@
+@media (max-width: 768px) {
+  .hero-title {
+    font-size: 2.5rem;
+  }
+  .meal-calories {
+    font-size: 3rem;
+  }
+  .macros-container {
+    flex-direction: column;
+    gap: 2rem;
+  }
+  .navbar-menu {
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+}

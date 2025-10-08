@@ -1,0 +1,29 @@
+.hero-title {
+  font-size: 3.75rem;
+  font-weight: 900;
+  margin-bottom: 1rem;
+  background: var(--gradient-accent);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  text-align: center;
+}
+
+.hero-subtitle {
+  font-size: 1.25rem;
+  color: var(--text-secondary);
+  text-align: center;
+  margin-bottom: 3rem;
+}
+
+.home__grid {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.home__input-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}

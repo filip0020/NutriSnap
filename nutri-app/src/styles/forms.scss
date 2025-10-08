@@ -1,0 +1,71 @@
+.form-group {
+  margin-bottom: 1.5rem;
+}
+
+.form-label {
+  display: block;
+  font-size: 0.875rem;
+  font-weight: 600;
+  margin-bottom: 0.5rem;
+  color: var(--text-secondary);
+}
+
+.dark .form-label {
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.form-input {
+  width: 100%;
+  padding: 0.75rem 1rem;
+  border-radius: 0.75rem;
+  border: 1px solid var(--border-color);
+  background-color: var(--bg-secondary);
+  color: var(--text-primary);
+  font-size: 1rem;
+  transition: all 0.3s;
+}
+
+.dark .form-input {
+  background-color: rgba(255, 255, 255, 0.05);
+}
+
+.form-input:focus {
+  outline: none;
+  border-color: var(--indigo);
+  box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1);
+}
+
+.file-input {
+  display: block;
+  width: 100%;
+  margin-bottom: 1rem;
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+}
+
+.file-input::file-selector-button {
+  margin-right: 1rem;
+  padding: 0.5rem 1rem;
+  border-radius: 9999px;
+  border: none;
+  font-size: 0.875rem;
+  font-weight: 600;
+  background-color: var(--indigo-light);
+  color: var(--indigo);
+  cursor: pointer;
+  transition: background-color 0.3s;
+}
+
+.file-input::file-selector-button:hover {
+  background-color: var(--indigo);
+  color: white;
+}
+
+.dark .file-input::file-selector-button {
+  background-color: rgba(79, 70, 229, 0.3);
+  color: rgba(129, 140, 248, 1);
+}
+
+.dark .file-input::file-selector-button:hover {
+  background-color: rgba(79, 70, 229, 0.8);
+}

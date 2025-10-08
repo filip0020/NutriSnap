@@ -6,9 +6,9 @@ import { useAuthStore } from '../store/authStore';
 const authStore = useAuthStore();
 
 interface UserProfile {
-  email: string;
-  caloriesTarget: number;
-  activityLevel: number;
+    email: string;
+    caloriesTarget: number;
+    activityLevel: number;
 }
 
 const userProfile = ref<UserProfile | null>(null);
@@ -17,7 +17,6 @@ const isSaving = ref(false);
 const error = ref<string | null>(null);
 const successMessage = ref<string | null>(null);
 
-// Câmpuri editabile pentru form
 const targetInput = ref(0);
 const activityInput = ref(0);
 
@@ -27,10 +26,11 @@ const fetchProfile = async () => {
     try {
         const response = await axios.get('http://localhost:3000/api/users/profile');
         userProfile.value = response.data;
-        
-        // Sincronizăm form-ul cu datele curente
-        targetInput.value = userProfile.value!.caloriesTarget;
-        activityInput.value = userProfile.value!.activityLevel;
+
+        if (userProfile.value) {
+            targetInput.value = userProfile.value.caloriesTarget;
+            activityInput.value = userProfile.value.activityLevel;
+        }
 
     } catch (err: any) {
         error.value = err.response?.data?.message || 'Nu s-a putut încărca profilul.';
@@ -43,18 +43,11 @@ const updateProfile = async () => {
     isSaving.value = true;
     error.value = null;
     successMessage.value = null;
-
     try {
-        const payload = {
-            caloriesTarget: targetInput.value,
-            activityLevel: activityInput.value
-        };
-
+        const payload = { caloriesTarget: targetInput.value, activityLevel: activityInput.value };
         const response = await axios.put('http://localhost:3000/api/users/profile', payload);
-        
         userProfile.value = response.data;
         successMessage.value = 'Profil actualizat cu succes!';
-
     } catch (err: any) {
         error.value = err.response?.data?.message || 'Eroare la salvarea modificărilor.';
     } finally {
@@ -68,64 +61,47 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="max-w-xl mx-auto mt-10 p-8 bg-white shadow-xl rounded-lg">
-    <h2 class="text-3xl font-bold mb-8 text-gray-800 text-center">Setări Profil & Obiective</h2>
+    <div class="profile">
 
-    <div v-if="isLoading" class="text-center p-10 text-xl text-blue-600">
-      Se încarcă datele...
-    </div>
+        <h2 class="profile__title">Setări Profil & Obiective</h2>
 
-    <div v-else-if="userProfile">
-        <div class="mb-8 p-4 bg-gray-50 rounded-lg">
-            <p class="text-sm font-medium text-gray-500">Email:</p>
-            <p class="text-lg font-semibold text-gray-800">{{ userProfile.email }}</p>
-        </div>
+        <div v-if="isLoading" class="profile__loading">Se încarcă datele...</div>
 
-        <div v-if="error" class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">{{ error }}</div>
-        <div v-if="successMessage" class="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded mb-4">{{ successMessage }}</div>
+        <div v-else-if="userProfile" class="profile__content">
 
-        <form @submit.prevent="updateProfile">
-            <div class="mb-6">
-                <label for="target" class="block text-gray-700 text-sm font-bold mb-2">Ținta Calorii Zilnice (Kcal)</label>
-                <input 
-                    id="target" 
-                    type="number" 
-                    v-model.number="targetInput" 
-                    required 
-                    min="500"
-                    class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 focus:ring-2 focus:ring-blue-500"
-                />
-            </div>
-            
-            <div class="mb-8">
-                <label for="activity" class="block text-gray-700 text-sm font-bold mb-2">Calorii Arse (Activitate de Bază/BMR)</label>
-                <input 
-                    id="activity" 
-                    type="number" 
-                    v-model.number="activityInput" 
-                    required 
-                    min="0"
-                    class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 focus:ring-2 focus:ring-blue-500"
-                />
+            <div class="profile__email-block">
+                <p class="profile__label">Email:</p>
+                <p class="profile__email">{{ userProfile.email }}</p>
             </div>
 
-            <button 
-                type="submit" 
-                :disabled="isSaving"
-                class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline transition duration-150 disabled:opacity-50"
-            >
-                {{ isSaving ? 'Se Salvează...' : 'Actualizează Profilul' }}
-            </button>
-        </form>
+            <div v-if="error" class="profile__error">{{ error }}</div>
+            <div v-if="successMessage" class="profile__success">{{ successMessage }}</div>
 
-        <div class="mt-8 pt-4 border-t border-gray-200">
-            <button 
-                @click="authStore.logout" 
-                class="w-full bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline transition duration-150"
-            >
-                Delogare
-            </button>
+            <form @submit.prevent="updateProfile" class="profile__form">
+                <div class="profile__form-group">
+                    <label for="target" class="profile__form-label">Ținta Calorii Zilnice (Kcal)</label>
+                    <input id="target" type="number" v-model.number="targetInput" required min="500"
+                        class="profile__form-input" />
+                </div>
+
+                <div class="profile__form-group">
+                    <label for="activity" class="profile__form-label">Calorii Arse (BMR)</label>
+                    <input id="activity" type="number" v-model.number="activityInput" required min="0"
+                        class="profile__form-input" />
+                </div>
+
+                <button type="submit" :disabled="isSaving" class="profile__btn-submit">
+                    {{ isSaving ? 'Se Salvează...' : 'Actualizează Profilul' }}
+                </button>
+            </form>
+
+            <button @click="authStore.logout" class="profile__btn-logout">Delogare</button>
+
         </div>
+
     </div>
-  </div>
 </template>
+
+<style scoped>
+/* Clase BEM pentru stilizare ulterioară */
+</style>

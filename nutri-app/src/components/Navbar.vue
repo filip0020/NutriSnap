@@ -1,29 +1,35 @@
 <script setup lang="ts">
-import { useAuthStore } from '../store/authStore';
+import { Moon, Sun } from 'lucide-vue-next'
+import { useAuthStore } from '../store/authStore'
 
-const authStore = useAuthStore();
+const props = defineProps<{ isDark: boolean }>()
+const emit = defineEmits<{ (e: 'toggle-theme'): void }>()
+const authStore = useAuthStore()
 </script>
 
 <template>
-  <nav class="bg-gray-800 p-4 shadow-lg sticky top-0 z-10">
-    <div class="container mx-auto flex justify-between items-center">
-      <RouterLink to="/" class="text-white text-2xl font-bold tracking-wider hover:text-green-400 transition duration-300">
+  <nav class="navbar">
+    <div class="navbar-container container">
+      <RouterLink to="/" class="navbar-brand">
         NutriSnap
       </RouterLink>
 
-      <div class="space-x-4 flex items-center">
+      <div class="navbar-menu">
         <template v-if="authStore.isLoggedIn">
-          <RouterLink to="/" class="text-gray-300 hover:text-white transition duration-200">Acasă</RouterLink>
-          <RouterLink to="/history" class="text-gray-300 hover:text-white transition duration-200">Istoric</RouterLink>
-          <RouterLink to="/profile" class="text-gray-300 hover:text-white transition duration-200">Profil</RouterLink>
-          <button @click="authStore.logout" class="bg-red-600 hover:bg-red-700 text-white px-3 py-1 rounded-lg text-sm transition duration-200">
-            Delogare
-          </button>
+          <RouterLink to="/" class="nav-link">Acasă</RouterLink>
+          <RouterLink to="/history" class="nav-link">Istoric</RouterLink>
+          <RouterLink to="/profile" class="nav-link">Profil</RouterLink>
+          <button @click="authStore.logout" class="btn btn-danger">Delogare</button>
         </template>
         <template v-else>
-          <RouterLink to="/login" class="text-gray-300 hover:text-white transition duration-200">Logare</RouterLink>
-          <RouterLink to="/register" class="bg-green-500 hover:bg-green-600 text-white px-3 py-1 rounded-lg text-sm transition duration-200">Înregistrare</RouterLink>
+          <RouterLink to="/login" class="nav-link">Logare</RouterLink>
+          <RouterLink to="/register" class="btn btn-primary">Înregistrare</RouterLink>
         </template>
+
+        <button @click="emit('toggle-theme')" class="btn" style="padding: 0.5rem;">
+          <Sun v-if="!props.isDark" style="width: 1.25rem; height: 1.25rem; color: #eab308;" />
+          <Moon v-else style="width: 1.25rem; height: 1.25rem; color: #60a5fa;" />
+        </button>
       </div>
     </div>
   </nav>

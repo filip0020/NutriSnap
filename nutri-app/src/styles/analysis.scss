@@ -1,0 +1,159 @@
+.analysis-card {
+  position: relative;
+  overflow: hidden;
+  border-radius: 1.5rem;
+  padding: 2rem;
+  backdrop-filter: blur(40px);
+  border: 2px solid rgba(16, 185, 129, 0.3);
+  box-shadow: 0 25px 50px -12px var(--shadow);
+  background: linear-gradient(
+    135deg,
+    rgba(16, 185, 129, 0.2) 0%,
+    rgba(34, 197, 94, 0.2) 100%
+  );
+}
+
+.dark .analysis-card {
+  background: linear-gradient(
+    135deg,
+    rgba(6, 78, 59, 0.2) 0%,
+    rgba(20, 83, 45, 0.2) 100%
+  );
+}
+
+.analysis-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 1.5rem;
+}
+
+.analysis-icon {
+  padding: 0.75rem;
+  border-radius: 1rem;
+  background: var(--gradient-primary);
+  box-shadow: 0 10px 15px -3px rgba(16, 185, 129, 0.4);
+}
+
+.meal-info {
+  padding: 1.5rem;
+  border-radius: 1rem;
+  backdrop-filter: blur(8px);
+  background-color: rgba(255, 255, 255, 0.05);
+  margin-bottom: 2rem;
+}
+
+.dark .meal-info {
+  background-color: rgba(255, 255, 255, 0.05);
+}
+
+.meal-name {
+  font-size: 1.875rem;
+  font-weight: 900;
+  margin-bottom: 1rem;
+}
+
+.meal-calories {
+  font-size: 4.5rem;
+  font-weight: 900;
+  background: var(--gradient-primary);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* === MACROS CIRCLES === */
+.macros-container {
+  display: flex;
+  justify-content: space-around;
+  align-items: center;
+  padding: 1.5rem;
+  border-radius: 1rem;
+  backdrop-filter: blur(8px);
+  background-color: rgba(255, 255, 255, 0.05);
+  margin-bottom: 1.5rem;
+}
+
+.macro-circle {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.circle-wrapper {
+  position: relative;
+  width: 7rem;
+  height: 7rem;
+}
+
+.circle-svg {
+  transform: rotate(-90deg);
+  width: 7rem;
+  height: 7rem;
+}
+
+.circle-bg {
+  stroke: rgba(255, 255, 255, 0.1);
+  stroke-width: 8;
+  fill: none;
+}
+
+.circle-progress {
+  stroke-width: 8;
+  fill: none;
+  stroke-linecap: round;
+  transition: all 1s ease-out;
+}
+
+.circle-protein {
+  stroke: #3b82f6;
+}
+.circle-carbs {
+  stroke: #f59e0b;
+}
+.circle-fats {
+  stroke: #ef4444;
+}
+
+.circle-text {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+}
+
+.circle-value {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: white;
+}
+
+.circle-unit {
+  font-size: 0.75rem;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.macro-label {
+  margin-top: 0.5rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.macro-dot {
+  width: 0.75rem;
+  height: 0.75rem;
+  border-radius: 9999px;
+}
+
+.dot-protein {
+  background-color: #3b82f6;
+}
+.dot-carbs {
+  background-color: #f59e0b;
+}
+.dot-fats {
+  background-color: #ef4444;
+}
