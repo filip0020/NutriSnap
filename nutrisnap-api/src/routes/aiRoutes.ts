@@ -1,12 +1,13 @@
 import express, { Request, Response } from 'express';
 import fs from 'fs';
 import multer from 'multer';
-import axios from 'axios';
 import path from 'path';
+import FormData from 'form-data';
+import axios from 'axios';
 
 const router = express.Router();
 
-// Configurare multer cu limite și validare
+// Configurare multer
 const upload = multer({
   dest: 'uploads/',
   limits: {
@@ -22,11 +23,100 @@ const upload = multer({
   }
 });
 
-const CLARIFAI_API_KEY = process.env.CLARIFAI_API_KEY;
-const CLARIFAI_PAT = process.env.CLARIFAI_PAT; // Personal Access Token
+const HUGGINGFACE_API_KEY = process.env.HUGGINGFACE_API_KEY;
 
-if (!CLARIFAI_API_KEY && !CLARIFAI_PAT) {
-  console.error('⚠️ ATENȚIE: CLARIFAI_API_KEY sau CLARIFAI_PAT nu sunt setate în environment variables!');
+if (!HUGGINGFACE_API_KEY) {
+  console.error('⚠️ ATENȚIE: HUGGINGFACE_API_KEY nu este setat în environment variables!');
+}
+
+// Funcție pentru analiza cu Hugging Face
+async function analyzeImageWithHuggingFace(imageBuffer: Buffer): Promise<any> {
+  try {
+    // Folosim modelul BLIP pentru image captioning
+    const API_URL = "https://api-inference.huggingface.co/models/Salesforce/blip-image-captioning-large";
+
+    const response = await axios.post(
+      API_URL,
+      imageBuffer,
+      {
+        headers: {
+          'Authorization': `Bearer ${HUGGINGFACE_API_KEY}`,
+          'Content-Type': 'application/octet-stream'
+        }
+      }
+    );
+
+    console.log('🤖 Răspuns de la Hugging Face:', response.data);
+
+    return response.data;
+  } catch (error: any) {
+    if (error.response?.status === 503) {
+      // Modelul se încarcă, așteptăm și reîncercăm
+      console.log('⏳ Modelul se încarcă, așteptăm 20 secunde...');
+      await new Promise(resolve => setTimeout(resolve, 20000));
+      return analyzeImageWithHuggingFace(imageBuffer);
+    }
+    throw error;
+  }
+}
+
+// Funcție pentru a extrage informații nutriționale din descriere
+function extractNutritionalInfo(description: string): any {
+  const lowerDesc = description.toLowerCase();
+
+  // Dicționar simplu de alimente comune și valorile lor
+  const foodDatabase: { [key: string]: { calories: number, protein: number, carbs: number, fats: number } } = {
+    'pizza': { calories: 800, protein: 30, carbs: 90, fats: 35 },
+    'burger': { calories: 650, protein: 35, carbs: 45, fats: 35 },
+    'pasta': { calories: 400, protein: 15, carbs: 70, fats: 8 },
+    'salad': { calories: 150, protein: 8, carbs: 15, fats: 8 },
+    'sandwich': { calories: 350, protein: 20, carbs: 40, fats: 12 },
+    'rice': { calories: 350, protein: 7, carbs: 75, fats: 2 },
+    'chicken': { calories: 450, protein: 45, carbs: 5, fats: 25 },
+    'fish': { calories: 350, protein: 40, carbs: 0, fats: 18 },
+    'soup': { calories: 200, protein: 10, carbs: 25, fats: 6 },
+    'bread': { calories: 250, protein: 8, carbs: 48, fats: 3 },
+    'cake': { calories: 450, protein: 5, carbs: 60, fats: 20 },
+    'fruit': { calories: 100, protein: 1, carbs: 25, fats: 0 },
+    'vegetables': { calories: 80, protein: 3, carbs: 15, fats: 1 },
+    'meat': { calories: 500, protein: 40, carbs: 0, fats: 35 },
+    'eggs': { calories: 150, protein: 13, carbs: 1, fats: 10 },
+    'cheese': { calories: 400, protein: 25, carbs: 2, fats: 33 },
+    'yogurt': { calories: 150, protein: 8, carbs: 17, fats: 5 },
+    'potato': { calories: 300, protein: 6, carbs: 65, fats: 1 },
+    'fries': { calories: 500, protein: 6, carbs: 60, fats: 25 },
+    'dessert': { calories: 400, protein: 4, carbs: 55, fats: 18 }
+  };
+
+  // Căutăm mâncarea în descriere
+  let mealName = 'Mâncare';
+  let nutritionData = { calories: 350, protein: 15, carbs: 45, fats: 12 }; // valori default
+
+  for (const [food, nutrition] of Object.entries(foodDatabase)) {
+    if (lowerDesc.includes(food)) {
+      mealName = food.charAt(0).toUpperCase() + food.slice(1);
+      nutritionData = nutrition;
+      break;
+    }
+  }
+
+  // Dacă găsim cuvinte cheie despre cantitate, ajustăm
+  if (lowerDesc.includes('large') || lowerDesc.includes('big')) {
+    nutritionData.calories = Math.round(nutritionData.calories * 1.3);
+    nutritionData.protein = Math.round(nutritionData.protein * 1.3);
+    nutritionData.carbs = Math.round(nutritionData.carbs * 1.3);
+    nutritionData.fats = Math.round(nutritionData.fats * 1.3);
+  } else if (lowerDesc.includes('small')) {
+    nutritionData.calories = Math.round(nutritionData.calories * 0.7);
+    nutritionData.protein = Math.round(nutritionData.protein * 0.7);
+    nutritionData.carbs = Math.round(nutritionData.carbs * 0.7);
+    nutritionData.fats = Math.round(nutritionData.fats * 0.7);
+  }
+
+  return {
+    mealName,
+    ...nutritionData
+  };
 }
 
 router.post(
@@ -50,94 +140,35 @@ router.post(
     const filePath = req.file.path;
 
     try {
-      const imageBytes = fs.readFileSync(filePath);
-      const base64Image = imageBytes.toString('base64');
+      // Citim imaginea
+      const imageBuffer = fs.readFileSync(filePath);
 
-      console.log('🔄 Trimitere cerere către Clarifai...');
+      console.log('📤 Trimitere cerere către Hugging Face...');
 
-      // Folosim GPT-4 Vision model de la Clarifai
-      const response = await axios.post(
-        'https://api.clarifai.com/v2/models/gpt-4-vision/outputs',
-        {
-          user_app_id: {
-            user_id: 'openai',
-            app_id: 'chat-completion'
-          },
-          inputs: [
-            {
-              data: {
-                image: {
-                  base64: base64Image
-                },
-                text: {
-                  raw: `Analizează această imagine de mâncare și returnează DOAR un obiect JSON valid cu următoarele câmpuri:
-{
-  "mealName": "numele mâncării în română",
-  "calories": număr estimat de calorii,
-  "protein": grame de proteine,
-  "carbs": grame de carbohidrați,
-  "fats": grame de grăsimi
-}
+      // Analizăm imaginea cu Hugging Face
+      const hfResponse = await analyzeImageWithHuggingFace(imageBuffer);
 
-Asigură-te că răspunsul este DOAR obiectul JSON, fără text suplimentar.`
-                }
-              }
-            }
-          ]
-        },
-        {
-          headers: {
-            'Authorization': `Key ${CLARIFAI_PAT || CLARIFAI_API_KEY}`,
-            'Content-Type': 'application/json'
-          },
-          timeout: 30000
-        }
-      );
+      // Extragem descrierea
+      const description = Array.isArray(hfResponse) ? hfResponse[0]?.generated_text : hfResponse.generated_text;
+      console.log('📝 Descriere primită:', description);
 
-      console.log('✅ Răspuns primit de la Clarifai');
-
-      // Extragem textul din răspuns
-      const rawText = response.data?.outputs?.[0]?.data?.text?.raw || '';
-      console.log('📝 Text brut primit:', rawText);
-
-      let jsonData: any;
-
-      try {
-        // Încercăm să extragem JSON din text
-        const jsonMatch = rawText.match(/\{[\s\S]*\}/);
-        if (jsonMatch) {
-          jsonData = JSON.parse(jsonMatch[0]);
-          console.log('✅ JSON parsat cu succes:', jsonData);
-        } else {
-          throw new Error('Nu s-a găsit JSON în răspuns');
-        }
-      } catch (parseError) {
-        console.warn('⚠️ Eroare la parsarea JSON, folosim valori default');
-        // Fallback: încercăm să extragem calorii din text
-        const calorieMatch = rawText.match(/(\d+)\s*(?:kcal|calorii)/i);
-        const estimatedCalories = calorieMatch ? parseInt(calorieMatch[1]) : 300;
-
-        jsonData = {
-          mealName: 'Mâncare neidentificată',
-          calories: estimatedCalories,
-          protein: Math.round(estimatedCalories * 0.15 / 4), // 15% din calorii
-          carbs: Math.round(estimatedCalories * 0.50 / 4),   // 50% din calorii
-          fats: Math.round(estimatedCalories * 0.35 / 9)     // 35% din calorii
-        };
-      }
+      // Extragem informații nutriționale
+      const nutritionInfo = extractNutritionalInfo(description || 'food');
 
       // Curățăm fișierul
       fs.unlinkSync(filePath);
       console.log('🗑️ Fișier șters:', filePath);
 
+      // Formatăm rezultatul final
       const result = {
-        mealName: jsonData.mealName || 'Mâncare neidentificată',
-        calories: Math.round(jsonData.calories || 300),
+        mealName: nutritionInfo.mealName,
+        calories: nutritionInfo.calories,
         nutrients: {
-          protein: Math.round(jsonData.protein || 15),
-          carbs: Math.round(jsonData.carbs || 40),
-          fats: Math.round(jsonData.fats || 10)
-        }
+          protein: nutritionInfo.protein,
+          carbs: nutritionInfo.carbs,
+          fats: nutritionInfo.fats
+        },
+        aiDescription: description
       };
 
       console.log('✅ Rezultat final:', result);
@@ -155,14 +186,14 @@ Asigură-te că răspunsul este DOAR obiectul JSON, fără text suplimentar.`
         fs.unlinkSync(filePath);
       }
 
-      // Returnăm o eroare mai descriptivă
       if (error.response?.status === 401) {
         res.status(500).json({
-          message: 'Eroare de autentificare cu Clarifai. Verifică API Key.'
+          message: 'Eroare de autentificare cu Hugging Face. Verifică API Key.',
+          details: process.env.NODE_ENV === 'development' ? error.message : undefined
         });
       } else if (error.response?.status === 429) {
         res.status(429).json({
-          message: 'Prea multe cereri. Încearcă din nou în câteva momente.'
+          message: 'Limită de cereri depășită. Încearcă din nou în câteva momente.'
         });
       } else {
         res.status(500).json({
@@ -174,11 +205,13 @@ Asigură-te că răspunsul este DOAR obiectul JSON, fără text suplimentar.`
   }
 );
 
-// Health check endpoint pentru AI service
+// Health check endpoint
 router.get('/health', (req: Request, res: Response) => {
   res.json({
     status: 'ok',
-    clarifaiConfigured: !!(CLARIFAI_API_KEY || CLARIFAI_PAT)
+    aiProvider: 'Hugging Face',
+    apiConfigured: !!HUGGINGFACE_API_KEY,
+    model: 'Salesforce/blip-image-captioning-large'
   });
 });
 
