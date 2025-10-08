@@ -1,0 +1,113 @@
+@use '../global/base' as *;
+
+.register-page {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  padding: 3rem 1rem;
+  transition: background-color 0.7s, color 0.5s;
+
+  .register-card {
+    max-width: 420px;
+    width: 100%;
+    background-color: var(--bg-secondary);
+    padding: 2.5rem;
+    border-radius: 1.5rem;
+    box-shadow: 0 8px 20px var(--shadow);
+    text-align: center;
+    transition: background-color 0.5s, color 0.5s;
+
+    h2 {
+      font-size: 2rem;
+      font-weight: 700;
+      margin-bottom: 2rem;
+      color: var(--text-primary);
+    }
+
+    form {
+      display: flex;
+      flex-direction: column;
+      gap: 1.25rem;
+
+      .error-message {
+        background-color: rgba($red, 0.1);
+        border: 1px solid rgba($red, 0.3);
+        color: $red;
+        padding: 0.75rem;
+        border-radius: 0.5rem;
+        font-size: 0.875rem;
+        text-align: center;
+      }
+
+      label {
+        display: block;
+        font-size: 0.9rem;
+        font-weight: 500;
+        margin-bottom: 0.3rem;
+        color: var(--text-secondary);
+        text-align: left;
+      }
+
+      input {
+        width: 100%;
+        padding: 0.6rem 0.75rem;
+        border-radius: 0.6rem;
+        border: 1px solid var(--border-color);
+        background-color: var(--bg-tertiary);
+        font-size: 1rem;
+        color: var(--text-primary);
+        outline: none;
+        transition: border-color 0.3s, box-shadow 0.3s, background-color 0.3s;
+
+        &:focus {
+          border-color: $emerald;
+          box-shadow: 0 0 0 2px rgba($emerald, 0.2);
+          background-color: lighten($bg-tertiary, 2%);
+        }
+
+        &::placeholder {
+          color: var(--text-tertiary);
+        }
+      }
+
+      button {
+        width: 100%;
+        padding: 0.75rem;
+        border-radius: 0.75rem;
+        background: $emerald;
+        color: #fff;
+        font-weight: 700;
+        font-size: 1rem;
+        cursor: pointer;
+        transition: background 0.3s, opacity 0.3s, transform 0.1s;
+
+        &:hover {
+          background: lighten($emerald, 8%);
+          transform: scale(1.01);
+        }
+
+        &:disabled {
+          opacity: 0.5;
+          cursor: not-allowed;
+        }
+      }
+
+      .login-link {
+        margin-top: 1rem;
+        font-size: 0.9rem;
+        color: $emerald;
+        display: block;
+        text-align: center;
+        text-decoration: none;
+        transition: color 0.3s;
+
+        &:hover {
+          color: lighten($emerald, 10%);
+        }
+      }
+    }
+  }
+}

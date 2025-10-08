@@ -2,7 +2,7 @@
 import { ref, onMounted, watch } from 'vue'
 import Navbar from './components/Navbar.vue'
 
-const isDark = ref(false)
+const isDark = ref(true)
 
 onMounted(() => {
   const saved = sessionStorage.getItem('theme')

@@ -14,20 +14,16 @@
 
 .card-glass {
   backdrop-filter: blur(40px);
-  background: linear-gradient(
-    135deg,
-    rgba(255, 255, 255, 0.1) 0%,
-    rgba(255, 255, 255, 0.05) 100%
-  );
+  background: linear-gradient(135deg,
+      rgba(255, 255, 255, 0.1) 0%,
+      rgba(255, 255, 255, 0.05) 100%);
   border: 2px solid var(--border-color);
 }
 
 .dark .card-glass {
-  background: linear-gradient(
-    135deg,
-    rgba(30, 41, 59, 0.4) 0%,
-    rgba(15, 23, 42, 0.2) 100%
-  );
+  background: linear-gradient(135deg,
+      rgba(30, 41, 59, 0.4) 0%,
+      rgba(15, 23, 42, 0.2) 100%);
 }
 
 .card-title {

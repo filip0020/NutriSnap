@@ -1,15 +1,19 @@
-@use 'alerts';
-@use 'analysis';
-@use 'animated-bg';
-@use 'base';
-@use 'buttons';
-@use 'cards';
-@use 'forms';
-@use 'hero';
-@use 'home';
-@use 'layout';
-@use 'loading';
-@use 'navbar';
-@use 'report';
-@use 'responsive';
-@use 'utilities';
+//Global
+@use './global/alerts';
+@use './global/analysis.scss';
+@use './global/animated-bg.scss';
+@use './global/base.scss' as*;
+@use './global/buttons.scss';
+@use './global/forms.scss';
+@use './global/report.scss';
+@use './global/responsive.scss';
+@use './global/utilities.scss' as *;
+
+//components
+@use './components/cards.scss';
+@use './components/hero.scss';
+@use './components/layout.scss';
+@use './components/loading.scss';
+@use './components/navbar.scss';
+@use './components/login.scss';
+@use './components/register.scss';
