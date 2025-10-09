@@ -61,9 +61,6 @@ app.use((req: Request, _res: Response, next: NextFunction) => {
   next();
 });
 
-// -----------------------------
-// 🩺 HEALTH CHECKS
-// -----------------------------
 app.get("/", (_req: Request, res: Response) => {
   res.json({
     status: "online",
@@ -84,17 +81,11 @@ app.get("/health", (_req: Request, res: Response) => {
   });
 });
 
-// -----------------------------
-// 📦 API ROUTES
-// -----------------------------
 app.use("/api/auth", authRoutes);
 app.use("/api/meals", mealRoutes);
 app.use("/api/users", userRoutes);
 app.use("/ai", aiRoutes);
 
-// -----------------------------
-// 🚫 404 HANDLER
-// -----------------------------
 app.use((req: Request, res: Response) => {
   console.warn("❌ 404 Not Found:", req.method, req.path);
   res.status(404).json({
@@ -104,9 +95,6 @@ app.use((req: Request, res: Response) => {
   });
 });
 
-// -----------------------------
-// 💥 GLOBAL ERROR HANDLER
-// -----------------------------
 app.use(
   (
     err: Error & { status?: number },
@@ -122,9 +110,6 @@ app.use(
   }
 );
 
-// -----------------------------
-// 🧠 MONGODB CONNECTION
-// -----------------------------
 const connectDB = async (retries = 5): Promise<void> => {
   const mongoURI = process.env.MONGODB_URI;
   if (!mongoURI) throw new Error("Missing MONGODB_URI in environment");
@@ -146,9 +131,6 @@ const connectDB = async (retries = 5): Promise<void> => {
   }
 };
 
-// -----------------------------
-// 🚀 START SERVER
-// -----------------------------
 const startServer = async (): Promise<void> => {
   try {
     await connectDB();
@@ -168,9 +150,6 @@ const startServer = async (): Promise<void> => {
   }
 };
 
-// -----------------------------
-// 🧹 GRACEFUL SHUTDOWN
-// -----------------------------
 process.on("SIGTERM", async () => {
   console.log("⚠️ SIGTERM received, shutting down gracefully...");
   await mongoose.connection.close();

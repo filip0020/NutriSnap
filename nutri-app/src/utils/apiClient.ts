@@ -5,7 +5,6 @@ const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 
 console.log('🔵 API_URL configurat:', API_URL);
 
-// ✅ Helper to check if token is expired
 const isTokenExpired = (token: string | null): boolean => {
   if (!token) return true;
 
