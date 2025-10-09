@@ -52,7 +52,7 @@ export const useAuthStore = defineStore('auth', () => {
 
       // ✅ Then verify with server (with shorter timeout)
       try {
-        const response = await apiClient.get<{ user: User }>('/auth/me', {
+        const response = await apiClient.get<{ user: User }>('/auth/verify', {
           timeout: 10000 // 10s timeout for verification
         });
         user.value = response.data.user;

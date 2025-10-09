@@ -88,7 +88,7 @@ app.get('/health', (req: Request, res: Response) => {
 });
 
 // API Routes - FIXED: Added userRoutes
-app.use('/auth', authRoutes);
+app.use('/api/auth', authRoutes);
 app.use('/api/meals', mealRoutes);
 app.use('/api/users', userRoutes); // ✅ ADDED
 app.use('/ai', aiRoutes);
