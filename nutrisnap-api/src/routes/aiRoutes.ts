@@ -272,66 +272,85 @@ function analyzeFoodFromDescription(description: string): any {
 }
 
 // Funcție pentru a analiza cu Hugging Face
-async function analyzeWithHuggingFace(imageBuffer: Buffer): Promise<string> {
+async function analyzeWithHuggingFace(imageBuffer: Buffer, retries = 3): Promise<string> {
   if (!HUGGINGFACE_API_KEY) {
-    console.warn('⚠️ Nu există API Key pentru Hugging Face');
     throw new Error('API Key lipsește');
   }
 
-  try {
-    const API_URL = "https://api-inference.huggingface.co/models/Salesforce/blip-image-captioning-large";
+  const API_URL = "https://api-inference.huggingface.co/models/Salesforce/blip-image-captioning-large";
 
-    console.log('📤 Trimitere către Hugging Face...');
+  for (let i = 0; i < retries; i++) {
+    try {
+      console.log(`📤 Attempt ${i + 1}/${retries} to Hugging Face...`);
 
-    const response = await axios.post(
-      API_URL,
-      imageBuffer,
-      {
-        headers: {
-          'Authorization': `Bearer ${HUGGINGFACE_API_KEY}`,
-          'Content-Type': 'application/octet-stream'
-        },
-        timeout: 30000
+      const response = await axios.post(
+        API_URL,
+        imageBuffer,
+        {
+          headers: {
+            'Authorization': `Bearer ${HUGGINGFACE_API_KEY}`,
+            'Content-Type': 'application/octet-stream'
+          },
+          timeout: 30000
+        }
+      );
+
+      console.log('✅ Hugging Face response:', response.data);
+
+      const description = Array.isArray(response.data)
+        ? response.data[0]?.generated_text
+        : response.data.generated_text;
+
+      if (!description) {
+        throw new Error('Nu s-a primit descriere de la AI');
       }
-    );
 
-    console.log('✅ Răspuns Hugging Face:', response.data);
+      return description;
 
-    const description = Array.isArray(response.data)
-      ? response.data[0]?.generated_text
-      : response.data.generated_text;
+    } catch (error: any) {
+      console.error(`❌ Attempt ${i + 1} failed:`, {
+        message: error.message,
+        status: error.response?.status,
+        data: error.response?.data,
+        code: error.code
+      });
 
-    if (!description) {
-      throw new Error('Nu s-a primit descriere de la AI');
+      // If model is loading (503), wait longer
+      if (error.response?.status === 503) {
+        if (i < retries - 1) {
+          const waitTime = Math.min(20000 * (i + 1), 60000);
+          console.log(`⏳ Model loading, waiting ${waitTime}ms...`);
+          await new Promise(resolve => setTimeout(resolve, waitTime));
+          continue;
+        }
+        throw new Error('Modelul AI se încarcă. Încearcă din nou în 1-2 minute.');
+      }
+
+      // For other errors, throw immediately
+      if (i === retries - 1) {
+        throw error;
+      }
+
+      // Wait before retry
+      await new Promise(resolve => setTimeout(resolve, 2000));
     }
-
-    return description;
-
-  } catch (error: any) {
-    console.error('❌ Eroare Hugging Face:', {
-      message: error.message,
-      status: error.response?.status,
-      data: error.response?.data
-    });
-
-    // Dacă modelul se încarcă
-    if (error.response?.status === 503) {
-      throw new Error('Modelul AI se încarcă. Încearcă din nou în 20-30 secunde.');
-    }
-
-    throw error;
   }
+
+  throw new Error('Failed after all retries');
 }
+
 
 // ✅ ADDED PROTECTION - Requires authentication
 router.post(
   '/analyze-image',
-  protect,  // ✅ ADD AUTH MIDDLEWARE
+  protect,
   upload.single('foodImage'),
   async (req: AuthRequest, res: Response): Promise<void> => {
     console.log('📸 ===== ANALYZE IMAGE REQUEST =====');
-    console.log('👤 User ID:', req.user?.id);  // ✅ LOG USER
+    console.log('👤 User ID:', req.user?.id);
     console.log('📁 File:', req.file ? 'Received ✅' : 'Missing ❌');
+    console.log('📝 Body keys:', Object.keys(req.body));
+    console.log('🔑 Headers:', req.headers.authorization ? 'Present' : 'Missing');
 
     if (!req.file) {
       console.error('❌ Niciun fișier primit');
@@ -340,72 +359,34 @@ router.post(
     }
 
     const filePath = req.file.path;
-    console.log('📍 File path:', filePath);
-    console.log('📊 File info:', {
-      mimetype: req.file.mimetype,
-      size: req.file.size,
-      originalname: req.file.originalname
-    });
 
     try {
-      // Citim imaginea
       const imageBuffer = fs.readFileSync(filePath);
       console.log('✅ Imagine citită, size:', imageBuffer.length, 'bytes');
 
-      // Analizăm cu Hugging Face
       const description = await analyzeWithHuggingFace(imageBuffer);
       console.log('🔍 Descriere AI:', description);
 
-      // Analizăm nutriția bazată pe descriere
-      const nutritionInfo = analyzeFoodFromDescription(description);
-      console.log('📊 Nutrition info:', nutritionInfo);
-
-      // Curățăm fișierul
-      if (fs.existsSync(filePath)) {
-        fs.unlinkSync(filePath);
-        console.log('🗑️ Fișier șters');
-      }
-
-      // Formatăm rezultatul
-      const result = {
-        mealName: nutritionInfo.mealName,
-        calories: nutritionInfo.calories,
-        nutrients: {
-          protein: nutritionInfo.protein,
-          carbs: nutritionInfo.carbs,
-          fats: nutritionInfo.fats
-        },
-        weight: nutritionInfo.weight,
-        confidence: nutritionInfo.confidence,
-        aiDescription: description
-      };
-
-      console.log('✅ ===== SUCCESS =====');
-      console.log('📤 Rezultat:', result);
-
-      res.json(result);
-
+      // ... rest of code
     } catch (error: any) {
-      console.error('❌ ===== ERROR =====');
-      console.error('Error details:', {
-        message: error.message,
-        stack: error.stack,
-        name: error.name
-      });
+      console.error('❌ ===== DETAILED ERROR =====');
+      console.error('Message:', error.message);
+      console.error('Stack:', error.stack);
+      console.error('Response:', error.response?.data);
+      console.error('Status:', error.response?.status);
 
-      // Curățăm fișierul
+      // Cleanup file
       try {
         if (fs.existsSync(filePath)) {
           fs.unlinkSync(filePath);
-          console.log('🗑️ Fișier șters (după eroare)');
         }
       } catch (cleanupError) {
-        console.error('❌ Eroare la ștergere fișier:', cleanupError);
+        console.error('❌ Cleanup error:', cleanupError);
       }
 
       res.status(500).json({
         message: error.message || 'Eroare la analizarea imaginii',
-        error: process.env.NODE_ENV === 'development' ? error.message : undefined
+        details: process.env.NODE_ENV === 'development' ? error.stack : undefined
       });
     }
   }
