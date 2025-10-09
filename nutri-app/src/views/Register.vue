@@ -1,84 +1,67 @@
 <template>
-  <div class="register-container" :class="{ dark: isDark }">
-    <div class="background-grid"></div>
-
-    <div class="gradient-orbs">
-      <div class="orb orb-1"></div>
-      <div class="orb orb-2"></div>
-    </div>
-
-    <button class="theme-toggle" @click="isDark = !isDark">
-      <Sun v-if="isDark" />
-      <Moon v-else />
-    </button>
-
-    <div class="register-card">
-      <h2 class="register-title">Creare cont NutriSnap</h2>
+  <div class="main-page">
+    <div class="login-card">
+      <h2>Creare cont NutriSnap</h2>
 
       <form @submit.prevent="handleRegister">
-        <div v-if="error" class="error-message">
-          {{ error }}
-        </div>
+        <div v-if="error" class="error-message">{{ error }}</div>
 
-        <div class="form-group">
+        <div>
           <label>Email</label>
           <input v-model="email" type="email" required placeholder="exemplu@email.com" />
         </div>
 
-        <div class="form-group">
+        <div>
           <label>Parolă</label>
           <input v-model="password" type="password" required minlength="6" placeholder="********" />
         </div>
 
-        <div class="form-group">
+        <div>
           <label>Confirmă parola</label>
           <input v-model="confirmPassword" type="password" required placeholder="********" />
         </div>
 
-        <button type="submit" :disabled="loading" class="submit-btn">
-          <div v-if="loading" class="spinner"></div>
-          <span>{{ loading ? 'Se creează...' : 'Înregistrare' }}</span>
+        <button type="submit" :disabled="loading">
+          {{ loading ? 'Se creează...' : 'Înregistrare' }}
         </button>
 
-        <div class="link-center">
-          <router-link to="/login">Ai deja cont? Autentifică-te</router-link>
-        </div>
+        <router-link to="/login" class="register-link">
+          Ai deja cont? Autentifică-te
+        </router-link>
       </form>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
-import { useRouter } from 'vue-router'
-import { useAuthStore } from '../store/authStore'
-import { Moon, Sun } from 'lucide-vue-next'
-import '../styles/main.scss';
+import { ref } from 'vue';
+import { useRouter } from 'vue-router';
+import { useAuthStore } from '../store/authStore';
 
-const router = useRouter()
-const authStore = useAuthStore()
+const router = useRouter();
+const authStore = useAuthStore();
 
-const email = ref('')
-const password = ref('')
-const confirmPassword = ref('')
-const error = ref('')
-const loading = ref(false)
-const isDark = ref(true)
+const email = ref('');
+const password = ref('');
+const confirmPassword = ref('');
+const error = ref('');
+const loading = ref(false);
 
 const handleRegister = async () => {
-  error.value = ''
+  error.value = '';
   if (password.value !== confirmPassword.value) {
-    error.value = 'Parolele nu coincid'
-    return
+    error.value = 'Parolele nu coincid';
+    return;
   }
-  loading.value = true
+
+  loading.value = true;
   try {
-    await authStore.register(email.value, password.value)
-    router.push('/')
+    await authStore.register(email.value, password.value);
+    router.push('/');
   } catch (err: any) {
-    error.value = err.message || 'Eroare la înregistrare'
+    error.value = err.message || 'Eroare la înregistrare';
   } finally {
-    loading.value = false
+    loading.value = false;
   }
-}
+};
 </script>

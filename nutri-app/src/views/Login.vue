@@ -1,5 +1,5 @@
 <template>
-  <div class="login-page">
+  <div class="main-page">
     <div class="login-card">
       <h2>Autentificare NutriSnap</h2>
       <form @submit.prevent="handleLogin">
@@ -51,7 +51,3 @@ const handleLogin = async () => {
   }
 };
 </script>
-
-<style lang="scss" scoped>
-@use '../styles/main.scss';
-</style>

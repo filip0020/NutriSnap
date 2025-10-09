@@ -9,6 +9,7 @@ import fs from 'fs';
 import authRoutes from './routes/authRoutes';
 import mealRoutes from './routes/mealRoutes';
 import aiRoutes from './routes/aiRoutes';
+import userRoutes from './routes/userRoutes';
 
 // Load environment variables
 dotenv.config();
@@ -71,7 +72,7 @@ app.get('/health', (req: Request, res: Response) => {
 
 // API Routes
 app.use('/auth', authRoutes);
-app.use('/meals', mealRoutes);
+app.use('/api/meals', mealRoutes);
 app.use('/ai', aiRoutes);
 
 // 404 Handler

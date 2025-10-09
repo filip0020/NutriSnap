@@ -9,6 +9,7 @@
 $bg-primary: #f9fafb;
 $bg-secondary: #ffffff;
 $bg-tertiary: #f3f4f6;
+$bg-dark: #0f1b37;
 
 $text-primary: #111827;
 $text-secondary: #6b7280;
@@ -33,6 +34,7 @@ $red-hover: #dc2626;
 $orange: #f97316;
 $yellow: #eab308;
 
+
 /* Gradients */
 $gradient-primary: linear-gradient(135deg, $emerald 0%, $green 100%);
 $gradient-accent: linear-gradient(135deg, $cyan 0%, $blue 50%, $emerald 100%);
@@ -52,6 +54,7 @@ $dark-shadow: rgba(0, 0, 0, 0.3);
   --bg-primary: #{$bg-primary};
   --bg-secondary: #{$bg-secondary};
   --bg-tertiary: #{$bg-tertiary};
+  --bg-dark: #{$bg-dark};
 
   --text-primary: #{$text-primary};
   --text-secondary: #{$text-secondary};

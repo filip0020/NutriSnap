@@ -1,13 +1,11 @@
 /* login.scss */
 @use '../global/base' as *;
 
-.login-page {
-  min-height: 100vh;
+.main-page {
   display: flex;
   align-items: center;
   justify-content: center;
   background-color: var(--bg-primary);
-  padding: 3rem 1rem;
   transition: background-color 0.7s, color 0.5s;
 
   .login-card {
@@ -76,6 +74,7 @@
         font-size: 1rem;
         cursor: pointer;
         transition: background 0.3s, opacity 0.3s;
+        border: none;
 
         &:hover {
           background: lighten($emerald, 10%);
