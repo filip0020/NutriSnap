@@ -41,21 +41,30 @@ export const useAuthStore = defineStore('auth', () => {
     loading.value = true;
 
     try {
-      // Verificăm dacă token-ul este valid
-      const response = await apiClient.get<{ user: User }>('/auth/verify');
+      // IMPORTANT: Folosim /auth/me în loc de /auth/verify
+      // Acest endpoint ar trebui să returneze user-ul curent
+      const response = await apiClient.get<{ user: User }>('/auth/me');
       user.value = response.data.user;
       console.log('✅ Utilizator autentificat:', user.value.email);
     } catch (err: any) {
-      console.warn('⚠️ Token invalid sau expirat');
-      // Token invalid - curățăm storage-ul
-      localStorage.removeItem('accessToken');
-      localStorage.removeItem('refreshToken');
-      user.value = null;
+      console.warn('⚠️ Token invalid sau expirat:', err.response?.status);
 
-      // Dacă suntem pe o pagină protejată, redirecționăm la login
-      const currentPath = window.location.pathname;
-      if (currentPath !== '/login' && currentPath !== '/register') {
-        router.push('/login');
+      // Dacă avem 401, token-ul a expirat - nu ștergem totul
+      // Lăsăm interceptorul să încerce refresh
+      if (err.response?.status === 401) {
+        console.log('🔄 Token-ul va fi refresh-uit automat...');
+        // Nu mai curățăm aici, interceptorul va gestiona
+      } else {
+        // Pentru alte erori, curățăm storage-ul
+        localStorage.removeItem('accessToken');
+        localStorage.removeItem('refreshToken');
+        user.value = null;
+
+        // Redirecționăm doar dacă nu suntem deja pe login/register
+        const currentPath = window.location.pathname;
+        if (currentPath !== '/login' && currentPath !== '/register') {
+          router.push('/login');
+        }
       }
     } finally {
       loading.value = false;

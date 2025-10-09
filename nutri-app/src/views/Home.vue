@@ -57,7 +57,7 @@ const saveMeal = async (type: 'manual' | 'image_ai') => {
 
 const fetchDailyReport = async () => {
     try {
-        const response = await apiClient.get('/meals/report?period=daily');
+        const response = await apiClient.get('/api/meals/report?period=daily');
         reportData.value = response.data.summary;
     } catch (error) {
         console.error("Eroare la extragerea raportului:", error);

@@ -1,9 +1,11 @@
+import dotenv from 'dotenv';
 import express, { Application, Request, Response } from 'express';
 import cors from 'cors';
-import dotenv from 'dotenv';
 import mongoose from 'mongoose';
 import path from 'path';
 import fs from 'fs';
+dotenv.config();
+
 
 // Import routes
 import authRoutes from './routes/authRoutes';
@@ -12,7 +14,7 @@ import aiRoutes from './routes/aiRoutes';
 import userRoutes from './routes/userRoutes';
 
 // Load environment variables
-dotenv.config();
+// dotenv.config();
 
 const app: Application = express();
 const PORT = process.env.PORT || 5000;

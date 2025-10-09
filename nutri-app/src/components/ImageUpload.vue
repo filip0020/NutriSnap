@@ -10,6 +10,9 @@ interface AnalysisResult {
     carbs: number;
     fats: number;
   };
+  weight?: number;
+  confidence?: string;
+  aiDescription?: string;
 }
 
 defineProps<{
@@ -69,8 +72,8 @@ const analyzeImage = async () => {
     formData.append('foodImage', selectedFile.value);
 
     console.log('📤 Trimitere imagine pentru analiză...');
+    console.log('📁 File:', selectedFile.value.name, selectedFile.value.size, 'bytes');
 
-    // IMPORTANT: Folosim /ai/analyze-image (nu /api/ai/analyze-image)
     const response = await apiClient.post<AnalysisResult>(
       '/ai/analyze-image',
       formData,
@@ -78,11 +81,17 @@ const analyzeImage = async () => {
         headers: {
           'Content-Type': 'multipart/form-data',
         },
-        timeout: 60000, // 60 secunde timeout pentru procesarea AI
+        timeout: 60000,
       }
     );
 
     console.log('✅ Analiză completă:', response.data);
+
+    // Verificăm dacă avem date valide
+    if (!response.data || !response.data.mealName) {
+      throw new Error('Răspuns invalid de la server');
+    }
+
     emit('analysis-complete', response.data);
 
     // Reset
@@ -90,18 +99,33 @@ const analyzeImage = async () => {
     previewUrl.value = null;
 
   } catch (err: any) {
-    console.error('❌ Eroare la analiză:', err);
+    console.error('❌ Eroare completă:', {
+      message: err.message,
+      response: err.response?.data,
+      status: err.response?.status,
+      code: err.code
+    });
 
+    // Gestionăm diferite tipuri de erori
     if (err.code === 'ECONNABORTED') {
       error.value = 'Timeout: Procesarea durează prea mult. Încearcă cu o imagine mai mică.';
+    } else if (err.code === 'ERR_NETWORK') {
+      error.value = 'Eroare de conexiune. Verifică dacă serverul rulează.';
+    } else if (err.response?.status === 404) {
+      error.value = 'Endpoint-ul /ai/analyze-image nu există pe server. Verifică configurarea rutelor.';
+    } else if (err.response?.status === 500) {
+      const serverMessage = err.response?.data?.message || 'Eroare server';
+      error.value = `Eroare server: ${serverMessage}`;
     } else if (err.response?.status === 429) {
       error.value = 'Prea multe cereri. Așteaptă câteva momente.';
+    } else if (err.response?.status === 401) {
+      error.value = 'Sesiune expirată. Te rugăm să te autentifici din nou.';
     } else if (err.response?.data?.message) {
       error.value = err.response.data.message;
-    } else if (err.message?.includes('Network Error')) {
-      error.value = 'Eroare de conexiune. Verifică conexiunea la internet.';
+    } else if (err.message) {
+      error.value = `Eroare: ${err.message}`;
     } else {
-      error.value = 'Eroare la analizarea imaginii. Te rugăm încearcă din nou.';
+      error.value = 'Eroare necunoscută. Te rugăm încearcă din nou.';
     }
   } finally {
     analyzing.value = false;
@@ -153,6 +177,7 @@ const clearSelection = () => {
       <div v-if="analyzing" class="image-upload__loading">
         <div class="spinner"></div>
         <p>Se procesează imaginea cu inteligență artificială...</p>
+        <p class="text-sm text-gray-500">Acest proces poate dura 20-30 secunde...</p>
       </div>
     </div>
   </div>
