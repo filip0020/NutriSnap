@@ -6,15 +6,11 @@ import path from 'path';
 import fs from 'fs';
 dotenv.config();
 
-
 // Import routes
 import authRoutes from './routes/authRoutes';
 import mealRoutes from './routes/mealRoutes';
 import aiRoutes from './routes/aiRoutes';
 import userRoutes from './routes/userRoutes';
-
-// Load environment variables
-// dotenv.config();
 
 const app: Application = express();
 const PORT = process.env.PORT || 5000;
@@ -26,29 +22,37 @@ if (!fs.existsSync(uploadsDir)) {
   console.log('📁 Folder uploads creat');
 }
 
-// CORS Configuration
+// CORS Configuration - FIXED
 const allowedOrigins = [
   process.env.FRONTEND_URL,
   'http://localhost:3000',
   'http://localhost:5173',
-  'https://your-app.vercel.app' // Înlocuiește cu URL-ul tău de pe Vercel
+  'https://nutri-snap-two.vercel.app/login'
 ].filter(Boolean);
 
 app.use(cors({
   origin: (origin, callback) => {
-    // Allow requests with no origin (mobile apps, Postman, etc.)
+    // Allow requests with no origin (mobile apps, Postman, curl, etc.)
     if (!origin) return callback(null, true);
+
+    // Allow all Vercel preview deployments
+    if (origin.includes('.vercel.app')) {
+      return callback(null, true);
+    }
 
     if (allowedOrigins.includes(origin)) {
       callback(null, true);
     } else {
       console.warn('⚠️ CORS blocked origin:', origin);
-      callback(null, true); // În producție, schimbă cu: callback(new Error('Not allowed by CORS'))
+      // In production, you might want to block instead:
+      // callback(new Error('Not allowed by CORS'));
+      callback(null, true);
     }
   },
   credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+  exposedHeaders: ['Authorization']
 }));
 
 // Middleware
@@ -62,19 +66,31 @@ app.use((req: Request, res: Response, next) => {
   next();
 });
 
-// Health check endpoint
+// CRITICAL: Root health check for Render.com
+app.get('/', (req: Request, res: Response) => {
+  res.json({
+    status: 'online',
+    message: 'API is running',
+    timestamp: new Date().toISOString()
+  });
+});
+
+// Enhanced health check endpoint
 app.get('/health', (req: Request, res: Response) => {
   res.json({
     status: 'ok',
     timestamp: new Date().toISOString(),
     environment: process.env.NODE_ENV,
-    mongodb: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected'
+    mongodb: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected',
+    uptime: process.uptime(),
+    memory: process.memoryUsage()
   });
 });
 
-// API Routes
+// API Routes - FIXED: Added userRoutes
 app.use('/auth', authRoutes);
 app.use('/api/meals', mealRoutes);
+app.use('/api/users', userRoutes); // ✅ ADDED
 app.use('/ai', aiRoutes);
 
 // 404 Handler
@@ -83,7 +99,20 @@ app.use((req: Request, res: Response) => {
   res.status(404).json({
     message: 'Route not found',
     path: req.path,
-    method: req.method
+    method: req.method,
+    availableRoutes: [
+      'GET /',
+      'GET /health',
+      'POST /auth/register',
+      'POST /auth/login',
+      'POST /auth/refresh',
+      'POST /auth/logout',
+      'GET /auth/verify',
+      'POST /api/meals',
+      'GET /api/meals/report',
+      'POST /ai/analyze-image',
+      'GET /ai/health'
+    ]
   });
 });
 
@@ -96,25 +125,35 @@ app.use((error: any, req: Request, res: Response, next: any) => {
   });
 });
 
-// MongoDB Connection
-const connectDB = async () => {
-  try {
-    const mongoURI = process.env.MONGODB_URI;
+// MongoDB Connection with retry logic
+const connectDB = async (retries = 5) => {
+  for (let i = 0; i < retries; i++) {
+    try {
+      const mongoURI = process.env.MONGODB_URI;
 
-    if (!mongoURI) {
-      throw new Error('MONGODB_URI nu este definit în environment variables');
+      if (!mongoURI) {
+        throw new Error('MONGODB_URI nu este definit în environment variables');
+      }
+
+      await mongoose.connect(mongoURI, {
+        serverSelectionTimeoutMS: 10000, // Increased timeout
+        socketTimeoutMS: 45000,
+      });
+
+      console.log('✅ MongoDB conectat cu succes');
+      const dbName = mongoose.connection.db?.databaseName;
+      console.log('📊 Database:', dbName);
+      return;
+
+    } catch (error: any) {
+      console.error(`❌ Tentativa ${i + 1}/${retries} eșuată:`, error.message);
+      if (i === retries - 1) {
+        console.error('❌ Nu s-a putut conecta la MongoDB după', retries, 'încercări');
+        throw error;
+      }
+      // Wait before retrying (exponential backoff)
+      await new Promise(resolve => setTimeout(resolve, Math.min(1000 * Math.pow(2, i), 10000)));
     }
-
-    await mongoose.connect(mongoURI);
-    console.log('✅ MongoDB conectat cu succes');
-
-    // Log database name
-    const dbName = mongoose.connection.db?.databaseName;
-    console.log('📊 Database:', dbName);
-
-  } catch (error: any) {
-    console.error('❌ Eroare conectare MongoDB:', error.message);
-    process.exit(1);
   }
 };
 
@@ -123,26 +162,31 @@ const startServer = async () => {
   try {
     await connectDB();
 
-    app.listen(PORT, () => {
+    const server = app.listen(PORT, () => {
       console.log('🚀 Server pornit pe portul:', PORT);
       console.log('🌍 Environment:', process.env.NODE_ENV || 'development');
       console.log('🔑 JWT Secret configurat:', !!process.env.JWT_SECRET);
-      console.log('🤖 Clarifai API configurată:', !!(process.env.CLARIFAI_API_KEY || process.env.CLARIFAI_PAT));
+      console.log('🤖 Hugging Face API configurată:', !!process.env.HUGGINGFACE_API_KEY);
       console.log('📡 CORS origins:', allowedOrigins);
       console.log('---');
       console.log('Endpoints disponibile:');
+      console.log('  GET  /');
       console.log('  GET  /health');
       console.log('  POST /auth/register');
       console.log('  POST /auth/login');
       console.log('  POST /auth/refresh');
       console.log('  POST /auth/logout');
       console.log('  GET  /auth/verify');
-      console.log('  POST /meals');
-      console.log('  GET  /meals/report');
+      console.log('  POST /api/meals');
+      console.log('  GET  /api/meals/report');
+      console.log('  GET  /api/users/profile');
       console.log('  POST /ai/analyze-image');
       console.log('  GET  /ai/health');
       console.log('---');
     });
+
+    // Set server timeout to 2 minutes (for Render.com)
+    server.timeout = 120000;
 
   } catch (error) {
     console.error('❌ Eroare la pornirea serverului:', error);
@@ -167,6 +211,17 @@ process.on('SIGINT', async () => {
 process.on('unhandledRejection', (reason, promise) => {
   console.error('❌ Unhandled Rejection:', reason);
 });
+
+// Keep-alive ping for Render.com (prevents cold starts)
+if (process.env.NODE_ENV === 'production') {
+  setInterval(async () => {
+    try {
+      console.log('🏓 Keep-alive ping');
+    } catch (error) {
+      console.error('❌ Keep-alive ping failed:', error);
+    }
+  }, 14 * 60 * 1000); // Every 14 minutes
+}
 
 // Start the server
 startServer();

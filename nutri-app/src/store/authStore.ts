@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia';
 import { ref, computed } from 'vue';
-import apiClient from '@/utils/apiClient';
+import apiClient, { checkAuth } from '@/utils/apiClient';
 import router from '@/router';
 
 interface User {
@@ -29,11 +29,9 @@ export const useAuthStore = defineStore('auth', () => {
 
   // Initialize - verifică dacă utilizatorul este deja autentificat
   const initialize = async () => {
-    const accessToken = localStorage.getItem('accessToken');
-    const refreshToken = localStorage.getItem('refreshToken');
-
-    if (!accessToken || !refreshToken) {
-      console.log('ℹ️ Nu există tokene salvate');
+    // ✅ First check if tokens exist and are valid (client-side check)
+    if (!checkAuth()) {
+      console.log('ℹ️ Nu există tokene valide salvate');
       return;
     }
 
@@ -41,31 +39,55 @@ export const useAuthStore = defineStore('auth', () => {
     loading.value = true;
 
     try {
-      // IMPORTANT: Folosim /auth/me în loc de /auth/verify
-      // Acest endpoint ar trebui să returneze user-ul curent
-      const response = await apiClient.get<{ user: User }>('/auth/me');
-      user.value = response.data.user;
-      console.log('✅ Utilizator autentificat:', user.value.email);
-    } catch (err: any) {
-      console.warn('⚠️ Token invalid sau expirat:', err.response?.status);
-
-      // Dacă avem 401, token-ul a expirat - nu ștergem totul
-      // Lăsăm interceptorul să încerce refresh
-      if (err.response?.status === 401) {
-        console.log('🔄 Token-ul va fi refresh-uit automat...');
-        // Nu mai curățăm aici, interceptorul va gestiona
-      } else {
-        // Pentru alte erori, curățăm storage-ul
-        localStorage.removeItem('accessToken');
-        localStorage.removeItem('refreshToken');
-        user.value = null;
-
-        // Redirecționăm doar dacă nu suntem deja pe login/register
-        const currentPath = window.location.pathname;
-        if (currentPath !== '/login' && currentPath !== '/register') {
-          router.push('/login');
+      // ✅ Get cached user first
+      const cachedUser = localStorage.getItem('user');
+      if (cachedUser) {
+        try {
+          user.value = JSON.parse(cachedUser);
+          console.log('✅ User cached loaded:', user.value?.email);
+        } catch (e) {
+          console.error('❌ Error parsing cached user');
         }
       }
+
+      // ✅ Then verify with server (with shorter timeout)
+      try {
+        const response = await apiClient.get<{ user: User }>('/auth/me', {
+          timeout: 10000 // 10s timeout for verification
+        });
+        user.value = response.data.user;
+        // Update cache
+        localStorage.setItem('user', JSON.stringify(response.data.user));
+        console.log('✅ Utilizator verificat cu server:', user.value.email);
+      } catch (verifyError: any) {
+        console.warn('⚠️ Server verification failed:', verifyError.message);
+
+        // ✅ If timeout or network error, keep user logged in with cached data
+        if (verifyError.skipLogout || verifyError.code === 'ECONNABORTED' || verifyError.code === 'ERR_NETWORK') {
+          console.log('🔄 Keeping user logged in despite verification failure');
+          if (!user.value && cachedUser) {
+            try {
+              user.value = JSON.parse(cachedUser);
+              console.log('✅ Using cached user data');
+            } catch (e) {
+              console.error('❌ Failed to parse cached user');
+            }
+          }
+        } else if (verifyError.response?.status === 401) {
+          // ✅ Real auth error - logout
+          console.log('❌ Token invalid (401) - logging out');
+          localStorage.clear();
+          user.value = null;
+
+          const currentPath = window.location.pathname;
+          if (currentPath !== '/login' && currentPath !== '/register') {
+            router.push('/login');
+          }
+        }
+      }
+    } catch (err: any) {
+      console.error('❌ Initialize error:', err);
+      // Don't logout on general errors
     } finally {
       loading.value = false;
     }
@@ -86,9 +108,10 @@ export const useAuthStore = defineStore('auth', () => {
 
       const { accessToken, refreshToken, user: userData } = response.data;
 
-      // Salvăm tokenele
+      // Salvăm tokenele și user-ul
       localStorage.setItem('accessToken', accessToken);
       localStorage.setItem('refreshToken', refreshToken);
+      localStorage.setItem('user', JSON.stringify(userData));
 
       // Setăm user-ul
       user.value = userData;
@@ -101,7 +124,17 @@ export const useAuthStore = defineStore('auth', () => {
       return true;
     } catch (err: any) {
       console.error('❌ Eroare login:', err);
-      error.value = err.response?.data?.message || 'Eroare la autentificare';
+
+      if (err.code === 'ECONNABORTED') {
+        error.value = 'Timeout: Serverul nu răspunde. Încearcă din nou.';
+      } else if (err.code === 'ERR_NETWORK') {
+        error.value = 'Eroare de conexiune. Verifică dacă serverul rulează.';
+      } else if (err.response?.status === 401) {
+        error.value = 'Email sau parolă incorectă';
+      } else {
+        error.value = err.response?.data?.message || 'Eroare la autentificare';
+      }
+
       return false;
     } finally {
       loading.value = false;
@@ -123,9 +156,10 @@ export const useAuthStore = defineStore('auth', () => {
 
       const { accessToken, refreshToken, user: userData } = response.data;
 
-      // Salvăm tokenele
+      // Salvăm tokenele și user-ul
       localStorage.setItem('accessToken', accessToken);
       localStorage.setItem('refreshToken', refreshToken);
+      localStorage.setItem('user', JSON.stringify(userData));
 
       // Setăm user-ul
       user.value = userData;
@@ -138,7 +172,19 @@ export const useAuthStore = defineStore('auth', () => {
       return true;
     } catch (err: any) {
       console.error('❌ Eroare înregistrare:', err);
-      error.value = err.response?.data?.message || 'Eroare la înregistrare';
+
+      if (err.code === 'ECONNABORTED') {
+        error.value = 'Timeout: Serverul nu răspunde. Încearcă din nou.';
+      } else if (err.code === 'ERR_NETWORK') {
+        error.value = 'Eroare de conexiune. Verifică dacă serverul rulează.';
+      } else if (err.response?.status === 400) {
+        error.value = err.response?.data?.message || 'Date invalide';
+      } else if (err.response?.status === 409) {
+        error.value = 'Email-ul este deja înregistrat';
+      } else {
+        error.value = err.response?.data?.message || 'Eroare la înregistrare';
+      }
+
       return false;
     } finally {
       loading.value = false;
@@ -153,9 +199,11 @@ export const useAuthStore = defineStore('auth', () => {
       const refreshToken = localStorage.getItem('refreshToken');
 
       if (refreshToken) {
-        // Încercăm să invalidăm token-ul pe server
+        // Încercăm să invalidăm token-ul pe server (fire and forget)
         try {
-          await apiClient.post('/auth/logout', { refreshToken });
+          await apiClient.post('/auth/logout', { refreshToken }, {
+            timeout: 5000 // Short timeout
+          });
           console.log('✅ Logout server reușit');
         } catch (err) {
           console.warn('⚠️ Eroare logout server (continuăm cu logout local)');
@@ -165,6 +213,7 @@ export const useAuthStore = defineStore('auth', () => {
       // Curățăm storage-ul și state-ul local indiferent de rezultat
       localStorage.removeItem('accessToken');
       localStorage.removeItem('refreshToken');
+      localStorage.removeItem('user');
       user.value = null;
       loading.value = false;
 
@@ -183,6 +232,9 @@ export const useAuthStore = defineStore('auth', () => {
 
       const response = await apiClient.put<{ user: User }>('/auth/profile', data);
       user.value = response.data.user;
+
+      // Update cache
+      localStorage.setItem('user', JSON.stringify(response.data.user));
 
       console.log('✅ Profil actualizat');
       return true;
