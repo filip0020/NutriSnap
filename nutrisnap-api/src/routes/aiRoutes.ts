@@ -2,8 +2,8 @@ import express, { Request, Response } from 'express';
 import fs from 'fs';
 import multer from 'multer';
 import axios from 'axios';
-import protect from '../middleware/auth';
-import { AuthRequest } from '../models/User';
+import protect from '../middleware/auth';  // ✅ ADD THIS
+import { AuthRequest } from '../models/User';  // ✅ ADD THIS
 
 const router = express.Router();
 
@@ -159,18 +159,31 @@ const foodDatabase: { [key: string]: { calories: number, protein: number, carbs:
 function estimateWeight(description: string, baseWeight: number): number {
   const lowerDesc = description.toLowerCase();
 
+  // Indicatori de dimensiune
   const sizeIndicators: { [key: string]: number } = {
-    'large': 1.5, 'big': 1.5, 'huge': 2.0, 'small': 0.7, 'tiny': 0.5,
-    'medium': 1.0, 'plate': 1.3, 'bowl': 1.2, 'cup': 0.8, 'slice': 0.4,
-    'piece': 0.6, 'serving': 1.0, 'portion': 1.0
+    'large': 1.5,
+    'big': 1.5,
+    'huge': 2.0,
+    'small': 0.7,
+    'tiny': 0.5,
+    'medium': 1.0,
+    'plate': 1.3,
+    'bowl': 1.2,
+    'cup': 0.8,
+    'slice': 0.4,
+    'piece': 0.6,
+    'serving': 1.0,
+    'portion': 1.0
   };
 
+  // Verificăm dacă există indicatori de dimensiune
   for (const [indicator, multiplier] of Object.entries(sizeIndicators)) {
     if (lowerDesc.includes(indicator)) {
       return Math.round(baseWeight * multiplier);
     }
   }
 
+  // Dacă găsim multiple items (e.g., "two pizzas", "three burgers")
   const numberWords: { [key: string]: number } = {
     'two': 2, 'three': 3, 'four': 4, 'five': 5,
     'couple': 2, 'several': 3, 'few': 2
@@ -195,13 +208,16 @@ function analyzeFoodFromDescription(description: string): any {
   let bestMatch: any = null;
   let bestScore = 0;
 
+  // Căutăm cel mai bun match
   for (const [foodName, nutrition] of Object.entries(foodDatabase)) {
     let score = 0;
 
+    // Match exact
     if (lowerDesc.includes(foodName)) {
       score += 10;
     }
 
+    // Match parțial pe cuvinte
     const foodWords = foodName.split(' ');
     for (const foodWord of foodWords) {
       if (words.includes(foodWord)) {
@@ -209,6 +225,7 @@ function analyzeFoodFromDescription(description: string): any {
       }
     }
 
+    // Match fuzzy pentru variante
     for (const word of words) {
       if (foodName.includes(word) || word.includes(foodName)) {
         score += 3;
@@ -224,8 +241,11 @@ function analyzeFoodFromDescription(description: string): any {
   console.log('🎯 Best match:', bestMatch?.foodName, 'Score:', bestScore);
 
   if (bestMatch && bestScore >= 3) {
+    // Estimăm greutatea bazată pe contextul din descriere
     const estimatedWeight = estimateWeight(description, bestMatch.avgWeight);
-    const weightRatio = estimatedWeight / 100;
+
+    // Calculăm nutrienții proporțional cu greutatea
+    const weightRatio = estimatedWeight / 100; // Valorile sunt per 100g
 
     return {
       mealName: bestMatch.foodName.charAt(0).toUpperCase() + bestMatch.foodName.slice(1),
@@ -238,6 +258,7 @@ function analyzeFoodFromDescription(description: string): any {
     };
   }
 
+  // Dacă nu găsim nimic, returnăm estimare generică
   console.log('⚠️ Nu s-a găsit match, folosim estimare generică');
   return {
     mealName: 'Aliment necunoscut',
@@ -250,10 +271,9 @@ function analyzeFoodFromDescription(description: string): any {
   };
 }
 
-// ✅ FIXED: Funcție pentru a analiza cu Hugging Face - WITH PROPER ERROR HANDLING
+// Funcție pentru a analiza cu Hugging Face
 async function analyzeWithHuggingFace(imageBuffer: Buffer, retries = 3): Promise<string> {
   if (!HUGGINGFACE_API_KEY) {
-    console.warn('⚠️ No Hugging Face API key, using fallback');
     throw new Error('API Key lipsește');
   }
 
@@ -262,7 +282,6 @@ async function analyzeWithHuggingFace(imageBuffer: Buffer, retries = 3): Promise
   for (let i = 0; i < retries; i++) {
     try {
       console.log(`📤 Attempt ${i + 1}/${retries} to Hugging Face...`);
-      console.log('🔑 Using API key:', HUGGINGFACE_API_KEY?.substring(0, 10) + '...');
 
       const response = await axios.post(
         API_URL,
@@ -296,13 +315,7 @@ async function analyzeWithHuggingFace(imageBuffer: Buffer, retries = 3): Promise
         code: error.code
       });
 
-      // Handle 401 - Invalid API key
-      if (error.response?.status === 401) {
-        console.error('❌ API Key invalid sau expirat!');
-        throw new Error('API Key Hugging Face invalid. Verifică setările.');
-      }
-
-      // Handle 503 - Model loading
+      // If model is loading (503), wait longer
       if (error.response?.status === 503) {
         if (i < retries - 1) {
           const waitTime = Math.min(20000 * (i + 1), 60000);
@@ -313,7 +326,7 @@ async function analyzeWithHuggingFace(imageBuffer: Buffer, retries = 3): Promise
         throw new Error('Modelul AI se încarcă. Încearcă din nou în 1-2 minute.');
       }
 
-      // For last retry, throw error
+      // For other errors, throw immediately
       if (i === retries - 1) {
         throw error;
       }
@@ -326,14 +339,15 @@ async function analyzeWithHuggingFace(imageBuffer: Buffer, retries = 3): Promise
   throw new Error('Failed after all retries');
 }
 
-// ✅ MAIN ROUTE - COMPLETE VERSION
+
+// ✅ ADDED PROTECTION - Requires authentication
 router.post(
   '/analyze-image',
-  protect,
+  protect,  // ✅ ADD AUTH MIDDLEWARE
   upload.single('foodImage'),
   async (req: AuthRequest, res: Response): Promise<void> => {
     console.log('📸 ===== ANALYZE IMAGE REQUEST =====');
-    console.log('👤 User ID:', req.user?.id);
+    console.log('👤 User ID:', req.user?.id);  // ✅ LOG USER
     console.log('📁 File:', req.file ? 'Received ✅' : 'Missing ❌');
 
     if (!req.file) {
@@ -343,38 +357,33 @@ router.post(
     }
 
     const filePath = req.file.path;
-    console.log('📁 File path:', filePath);
+    console.log('📍 File path:', filePath);
+    console.log('📊 File info:', {
+      mimetype: req.file.mimetype,
+      size: req.file.size,
+      originalname: req.file.originalname
+    });
 
     try {
-      // Read image
+      // Citim imaginea
       const imageBuffer = fs.readFileSync(filePath);
       console.log('✅ Imagine citită, size:', imageBuffer.length, 'bytes');
 
-      // Try AI analysis first
-      let description: string;
-      let usedFallback = false;
+      // Analizăm cu Hugging Face
+      const description = await analyzeWithHuggingFace(imageBuffer);
+      console.log('🔍 Descriere AI:', description);
 
-      try {
-        description = await analyzeWithHuggingFace(imageBuffer);
-        console.log('🔍 Descriere AI:', description);
-      } catch (aiError: any) {
-        console.warn('⚠️ AI analysis failed, using fallback:', aiError.message);
-        // Fallback to generic description
-        description = 'food on a plate';
-        usedFallback = true;
-      }
-
-      // Analyze nutrition
+      // Analizăm nutriția bazată pe descriere
       const nutritionInfo = analyzeFoodFromDescription(description);
       console.log('📊 Nutrition info:', nutritionInfo);
 
-      // Cleanup file
+      // Curățăm fișierul
       if (fs.existsSync(filePath)) {
         fs.unlinkSync(filePath);
         console.log('🗑️ Fișier șters');
       }
 
-      // Format result
+      // Formatăm rezultatul
       const result = {
         mealName: nutritionInfo.mealName,
         calories: nutritionInfo.calories,
@@ -384,9 +393,8 @@ router.post(
           fats: nutritionInfo.fats
         },
         weight: nutritionInfo.weight,
-        confidence: usedFallback ? 'low' : nutritionInfo.confidence,
-        aiDescription: usedFallback ? 'Analiză bazată pe date presetate' : description,
-        usedFallback
+        confidence: nutritionInfo.confidence,
+        aiDescription: description
       };
 
       console.log('✅ ===== SUCCESS =====');
@@ -395,23 +403,26 @@ router.post(
       res.json(result);
 
     } catch (error: any) {
-      console.error('❌ ===== DETAILED ERROR =====');
-      console.error('Message:', error.message);
-      console.error('Stack:', error.stack);
+      console.error('❌ ===== ERROR =====');
+      console.error('Error details:', {
+        message: error.message,
+        stack: error.stack,
+        name: error.name
+      });
 
-      // Cleanup file
+      // Curățăm fișierul
       try {
         if (fs.existsSync(filePath)) {
           fs.unlinkSync(filePath);
           console.log('🗑️ Fișier șters (după eroare)');
         }
       } catch (cleanupError) {
-        console.error('❌ Cleanup error:', cleanupError);
+        console.error('❌ Eroare la ștergere fișier:', cleanupError);
       }
 
       res.status(500).json({
         message: error.message || 'Eroare la analizarea imaginii',
-        details: process.env.NODE_ENV === 'development' ? error.stack : undefined
+        error: process.env.NODE_ENV === 'development' ? error.message : undefined
       });
     }
   }
