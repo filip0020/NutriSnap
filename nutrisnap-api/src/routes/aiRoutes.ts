@@ -2,6 +2,8 @@ import express, { Request, Response } from 'express';
 import fs from 'fs';
 import multer from 'multer';
 import axios from 'axios';
+import protect from '../middleware/auth';  // ✅ ADD THIS
+import { AuthRequest } from '../models/User';  // ✅ ADD THIS
 
 const router = express.Router();
 
@@ -321,11 +323,14 @@ async function analyzeWithHuggingFace(imageBuffer: Buffer): Promise<string> {
   }
 }
 
+// ✅ ADDED PROTECTION - Requires authentication
 router.post(
   '/analyze-image',
+  protect,  // ✅ ADD AUTH MIDDLEWARE
   upload.single('foodImage'),
-  async (req: Request, res: Response): Promise<void> => {
+  async (req: AuthRequest, res: Response): Promise<void> => {
     console.log('📸 ===== ANALYZE IMAGE REQUEST =====');
+    console.log('👤 User ID:', req.user?.id);  // ✅ LOG USER
     console.log('📁 File:', req.file ? 'Received ✅' : 'Missing ❌');
 
     if (!req.file) {
@@ -335,7 +340,7 @@ router.post(
     }
 
     const filePath = req.file.path;
-    console.log('📁 File path:', filePath);
+    console.log('📍 File path:', filePath);
     console.log('📊 File info:', {
       mimetype: req.file.mimetype,
       size: req.file.size,
@@ -349,7 +354,7 @@ router.post(
 
       // Analizăm cu Hugging Face
       const description = await analyzeWithHuggingFace(imageBuffer);
-      console.log('📝 Descriere AI:', description);
+      console.log('🔍 Descriere AI:', description);
 
       // Analizăm nutriția bazată pe descriere
       const nutritionInfo = analyzeFoodFromDescription(description);
@@ -406,7 +411,7 @@ router.post(
   }
 );
 
-// Health check
+// Health check - NO AUTH NEEDED
 router.get('/health', (req: Request, res: Response) => {
   res.json({
     status: 'ok',
