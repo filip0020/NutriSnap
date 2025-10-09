@@ -59,8 +59,8 @@ apiClient.interceptors.request.use(
   (config: InternalAxiosRequestConfig) => {
     const accessToken = localStorage.getItem('accessToken');
 
-    // ✅ Don't add token to public endpoints
-    const publicEndpoints = ['/auth/login', '/auth/register'];
+    // ✅ Don't add token to public endpoints - FIXED PATHS
+    const publicEndpoints = ['/api/auth/login', '/api/auth/register'];
     const isPublicEndpoint = publicEndpoints.some(endpoint => config.url?.includes(endpoint));
 
     if (accessToken && config.headers && !isPublicEndpoint) {
@@ -112,8 +112,8 @@ apiClient.interceptors.response.use(
     if (error.code === 'ECONNABORTED' || error.message.includes('timeout')) {
       console.error('⏱️ Request timeout - server might be cold starting');
 
-      // ✅ For /auth/verify or /auth/me timeout, try to use cached token instead of logging out
-      if (originalRequest.url?.includes('/auth/verify') || originalRequest.url?.includes('/auth/me')) {
+      // ✅ For /auth/verify or /auth/me timeout, try to use cached token instead of logging out - FIXED PATHS
+      if (originalRequest.url?.includes('/api/auth/verify') || originalRequest.url?.includes('/api/auth/me')) {
         console.warn('⚠️ Auth verification timeout - keeping user logged in with cached token');
         return Promise.reject({
           ...error,
@@ -143,14 +143,14 @@ apiClient.interceptors.response.use(
       return Promise.reject(error);
     }
 
-    // ✅ Don't try to refresh for these endpoints
-    const noRefreshEndpoints = ['/auth/login', '/auth/register', '/auth/refresh'];
+    // ✅ Don't try to refresh for these endpoints - FIXED PATHS
+    const noRefreshEndpoints = ['/api/auth/login', '/api/auth/register', '/api/auth/refresh'];
     if (noRefreshEndpoints.some(endpoint => originalRequest.url?.includes(endpoint))) {
       return Promise.reject(error);
     }
 
-    // ✅ For /auth/verify or /auth/me - if it fails with 401, just logout silently
-    if (originalRequest.url?.includes('/auth/verify') || originalRequest.url?.includes('/auth/me')) {
+    // ✅ For /auth/verify or /auth/me - if it fails with 401, just logout silently - FIXED PATHS
+    if (originalRequest.url?.includes('/api/auth/verify') || originalRequest.url?.includes('/api/auth/me')) {
       console.warn('⚠️ Auth verification returned 401 - token invalid, logging out');
       localStorage.clear();
       window.location.href = '/login';
@@ -188,8 +188,9 @@ apiClient.interceptors.response.use(
     try {
       console.log('🔄 Attempting token refresh...');
 
+      // FIXED PATH: /api/auth/refresh
       const response = await axios.post(
-        `${API_URL}/auth/refresh`,
+        `${API_URL}/api/auth/refresh`,
         { refreshToken },
         {
           timeout: 60000,

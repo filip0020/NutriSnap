@@ -50,9 +50,9 @@ export const useAuthStore = defineStore('auth', () => {
         }
       }
 
-      // ✅ Then verify with server (with shorter timeout)
+      // ✅ Then verify with server (with shorter timeout) - FIXED PATH
       try {
-        const response = await apiClient.get<{ user: User }>('/auth/me', {
+        const response = await apiClient.get<{ user: User }>('/api/auth/verify', {
           timeout: 10000 // 10s timeout for verification
         });
         user.value = response.data.user;
@@ -101,7 +101,8 @@ export const useAuthStore = defineStore('auth', () => {
     try {
       console.log('📤 Încercare login pentru:', email);
 
-      const response = await apiClient.post<LoginResponse>('/auth/login', {
+      // FIXED PATH: /api/auth/login
+      const response = await apiClient.post<LoginResponse>('/api/auth/login', {
         email,
         password
       });
@@ -149,7 +150,8 @@ export const useAuthStore = defineStore('auth', () => {
     try {
       console.log('📤 Încercare înregistrare pentru:', email);
 
-      const response = await apiClient.post<LoginResponse>('/auth/register', {
+      // FIXED PATH: /api/auth/register
+      const response = await apiClient.post<LoginResponse>('/api/auth/register', {
         email,
         password
       });
@@ -201,7 +203,8 @@ export const useAuthStore = defineStore('auth', () => {
       if (refreshToken) {
         // Încercăm să invalidăm token-ul pe server (fire and forget)
         try {
-          await apiClient.post('/auth/logout', { refreshToken }, {
+          // FIXED PATH: /api/auth/logout
+          await apiClient.post('/api/auth/logout', { refreshToken }, {
             timeout: 5000 // Short timeout
           });
           console.log('✅ Logout server reușit');
@@ -230,7 +233,8 @@ export const useAuthStore = defineStore('auth', () => {
     try {
       console.log('📤 Actualizare profil:', data);
 
-      const response = await apiClient.put<{ user: User }>('/auth/profile', data);
+      // FIXED PATH: /api/auth/profile
+      const response = await apiClient.put<{ user: User }>('/api/auth/profile', data);
       user.value = response.data.user;
 
       // Update cache
