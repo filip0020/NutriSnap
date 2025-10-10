@@ -216,16 +216,16 @@ const HUGGINGFACE_API_KEY = process.env.HUGGINGFACE_API_KEY || '';
 
 console.log('🔑 Hugging Face API Key status:', HUGGINGFACE_API_KEY ? 'SET ✅' : 'NOT SET ❌');
 
-// ✅ FIXED: Use nlpconnect/vit-gpt2-image-captioning (WORKS!)
+// ✅ CORRECT MODEL URL - Salesforce BLIP is reliable and works with read tokens
 async function analyzeWithHuggingFace(imageBuffer: Buffer, retries = 3): Promise<string> {
   if (!HUGGINGFACE_API_KEY) throw new Error('HUGGINGFACE_API_KEY is not set');
 
-  // ✅ THIS MODEL WORKS WITH READ TOKEN!
-  const API_URL = 'https://api-inference.huggingface.co/models/nlpconnect/vit-gpt2-image-captioning';
+  // ✅ THIS IS THE CORRECT MODEL PATH THAT WORKS!
+  const API_URL = 'https://api-inference.huggingface.co/models/Salesforce/blip-image-captioning-base';
 
   for (let i = 0; i < retries; i++) {
     try {
-      console.log(`📤 Attempt ${i + 1}/${retries} to Hugging Face (vit-gpt2)...`);
+      console.log(`📤 Attempt ${i + 1}/${retries} to Hugging Face (Salesforce BLIP)...`);
 
       const resp: AxiosResponse = await axios.post(API_URL, imageBuffer, {
         headers: {
@@ -279,7 +279,7 @@ async function analyzeWithHuggingFace(imageBuffer: Buffer, retries = 3): Promise
 
       // Model not found
       if (status === 404) {
-        throw new Error(`Model not found. The model URL might be incorrect.`);
+        throw new Error(`Model not found. Please verify the API key and model path.`);
       }
 
       // Last retry
@@ -366,7 +366,7 @@ router.get('/health', (req: Request, res: Response) => {
   res.json({
     status: 'ok',
     aiProvider: 'Hugging Face',
-    model: 'nlpconnect/vit-gpt2-image-captioning',
+    model: 'Salesforce/blip-image-captioning-base',
     apiConfigured: !!HUGGINGFACE_API_KEY,
     foodDatabaseSize: Object.keys(foodDatabase).length,
     timestamp: new Date().toISOString()
