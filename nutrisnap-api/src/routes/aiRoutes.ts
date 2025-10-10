@@ -213,71 +213,161 @@ const HUGGINGFACE_API_KEY = process.env.HUGGINGFACE_API_KEY || '';
 
 console.log('🔑 Hugging Face API Key status:', HUGGINGFACE_API_KEY ? 'SET ✅' : 'NOT SET ❌');
 
-// ✅ MULTIPLE MODELS - Try each until one works (October 2025 verified)
+// ✅ UPDATED OCTOBER 2025 - Working Models with better retry logic
 const MODELS_TO_TRY = [
-  'nlpconnect/vit-gpt2-image-captioning',
-  'Salesforce/blip-image-captioning-base',
-  'Salesforce/blip-image-captioning-large',
-  'ydshieh/vit-gpt2-coco-en'
+  // BLIP models - Most reliable for food/object detection
+  { name: 'Salesforce/blip-image-captioning-base', priority: 1 },
+  { name: 'Salesforce/blip-image-captioning-large', priority: 2 },
+
+  // ViT-GPT2 models - Good for general captions
+  { name: 'nlpconnect/vit-gpt2-image-captioning', priority: 3 },
+  { name: 'ydshieh/vit-gpt2-coco-en', priority: 4 },
+
+  // Alternative models
+  { name: 'microsoft/git-base-coco', priority: 5 },
+  { name: 'microsoft/git-large-coco', priority: 6 }
 ];
 
-async function tryModel(modelName: string, imageBuffer: Buffer): Promise<string | null> {
+interface ModelAttemptResult {
+  success: boolean;
+  description?: string;
+  error?: string;
+  modelName: string;
+  status?: number;
+}
+
+async function tryModelWithRetry(
+  modelName: string,
+  imageBuffer: Buffer,
+  retries: number = 2
+): Promise<ModelAttemptResult> {
   const API_URL = `https://api-inference.huggingface.co/models/${modelName}`;
 
-  try {
-    console.log(`🔄 Trying model: ${modelName}`);
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      console.log(`🔄 [Attempt ${attempt}/${retries}] Trying model: ${modelName}`);
 
-    const resp: AxiosResponse = await axios.post(API_URL, imageBuffer, {
-      headers: {
-        Authorization: `Bearer ${HUGGINGFACE_API_KEY}`,
-        'Content-Type': 'application/octet-stream'
-      },
-      timeout: 30000
-    });
+      const resp: AxiosResponse = await axios.post(API_URL, imageBuffer, {
+        headers: {
+          Authorization: `Bearer ${HUGGINGFACE_API_KEY}`,
+          'Content-Type': 'application/octet-stream'
+        },
+        timeout: 30000
+      });
 
-    const data = resp.data;
-    let description = '';
+      const data = resp.data;
+      let description = '';
 
-    if (Array.isArray(data) && data.length > 0) {
-      description = data[0]?.generated_text || '';
-    } else if (typeof data === 'object' && data.generated_text) {
-      description = data.generated_text;
-    } else if (typeof data === 'string') {
-      description = data;
+      // Parse different response formats
+      if (Array.isArray(data) && data.length > 0) {
+        description = data[0]?.generated_text || '';
+      } else if (typeof data === 'object' && data.generated_text) {
+        description = data.generated_text;
+      } else if (typeof data === 'string') {
+        description = data;
+      }
+
+      if (description && description.length > 3) {
+        console.log(`✅ SUCCESS with ${modelName}: "${description}"`);
+        return {
+          success: true,
+          description,
+          modelName
+        };
+      }
+
+      console.log(`⚠️ Model ${modelName} returned empty description`);
+
+    } catch (err: any) {
+      const status = err?.response?.status;
+      const errorData = err?.response?.data;
+
+      console.log(`❌ [Attempt ${attempt}/${retries}] Model ${modelName} failed:`, {
+        status,
+        error: errorData?.error || err.message
+      });
+
+      // If it's loading (503), wait and retry
+      if (status === 503 && attempt < retries) {
+        const waitTime = 2000 * attempt; // Exponential backoff
+        console.log(`⏳ Model loading, waiting ${waitTime}ms before retry...`);
+        await new Promise(resolve => setTimeout(resolve, waitTime));
+        continue;
+      }
+
+      // If it's rate limit (429), skip to next model
+      if (status === 429) {
+        return {
+          success: false,
+          error: 'Rate limit exceeded',
+          modelName,
+          status
+        };
+      }
+
+      // Last attempt failed
+      if (attempt === retries) {
+        return {
+          success: false,
+          error: errorData?.error || err.message,
+          modelName,
+          status
+        };
+      }
     }
-
-    if (description) {
-      console.log(`✅ SUCCESS with ${modelName}: ${description}`);
-      return description;
-    }
-
-    return null;
-  } catch (err: any) {
-    const status = err?.response?.status;
-    console.log(`❌ Model ${modelName} failed with status ${status}`);
-    return null;
   }
+
+  return {
+    success: false,
+    error: 'All retries exhausted',
+    modelName
+  };
 }
 
 async function analyzeWithHuggingFace(imageBuffer: Buffer): Promise<string> {
   if (!HUGGINGFACE_API_KEY) {
-    throw new Error('HUGGINGFACE_API_KEY is not set');
+    throw new Error('HUGGINGFACE_API_KEY is not configured. Please set it in your environment variables.');
   }
 
   console.log(`🚀 Starting image analysis with ${MODELS_TO_TRY.length} models...`);
 
-  // Try each model
-  for (const modelName of MODELS_TO_TRY) {
-    const result = await tryModel(modelName, imageBuffer);
-    if (result) {
-      return result;
+  const results: ModelAttemptResult[] = [];
+
+  // Try each model in priority order
+  for (const model of MODELS_TO_TRY) {
+    const result = await tryModelWithRetry(model.name, imageBuffer, 2);
+    results.push(result);
+
+    if (result.success && result.description) {
+      console.log(`✅ Analysis complete using model: ${model.name}`);
+      return result.description;
     }
-    // Small delay between attempts
-    await new Promise(r => setTimeout(r, 500));
+
+    // Small delay between models to avoid rate limiting
+    await new Promise(resolve => setTimeout(resolve, 500));
   }
 
-  // If all models fail, throw error
-  throw new Error('All HuggingFace models failed. Models may be loading or temporarily unavailable. Please try again in 30 seconds.');
+  // All models failed - create detailed error message
+  console.error('❌ All models failed. Results:', results);
+
+  const loadingModels = results.filter(r => r.status === 503);
+  const rateLimited = results.filter(r => r.status === 429);
+
+  if (loadingModels.length > 0) {
+    throw new Error(
+      `HuggingFace models are currently loading. This typically takes 20-30 seconds. Please try again in a moment. (${loadingModels.length}/${results.length} models loading)`
+    );
+  }
+
+  if (rateLimited.length > 0) {
+    throw new Error(
+      `Rate limit exceeded on HuggingFace API. Please wait a moment before trying again. Consider upgrading your API tier for higher limits.`
+    );
+  }
+
+  throw new Error(
+    `Unable to analyze image with HuggingFace models. All ${results.length} models failed. Please check your API key and try again later.`
+  );
 }
 
 const skipAuth = process.env.SKIP_AUTH === 'true';
@@ -326,7 +416,7 @@ router.post(
       console.error('❌ Route error:', error?.message || error);
 
       const devDetails = process.env.NODE_ENV === 'development'
-        ? { stack: error?.stack, raw: error?.response?.data || null }
+        ? { stack: error?.stack }
         : undefined;
 
       res.status(500).json({
@@ -351,7 +441,7 @@ router.get('/health', (req: Request, res: Response) => {
   res.json({
     status: 'ok',
     aiProvider: 'Hugging Face',
-    models: MODELS_TO_TRY,
+    models: MODELS_TO_TRY.map(m => m.name),
     apiConfigured: !!HUGGINGFACE_API_KEY,
     foodDatabaseSize: Object.keys(foodDatabase).length,
     timestamp: new Date().toISOString()
