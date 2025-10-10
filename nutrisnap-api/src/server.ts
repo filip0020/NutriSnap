@@ -25,30 +25,51 @@ if (!fs.existsSync(uploadsDir)) {
 }
 
 // -----------------------------
-// 🔒 CORS CONFIGURATION
+// 🔒 CORS CONFIGURATION - FIXED
 // -----------------------------
 const allowedOrigins: string[] = [
   process.env.FRONTEND_URL || "",
   "http://localhost:3000",
   "http://localhost:5173",
-  "https://nutri-snap-two.vercel.app/login",
+  "https://nutri-snap-two.vercel.app", // ✅ FIXED - removed /login
 ].filter(Boolean);
 
 const corsOptions: CorsOptions = {
   origin: (origin, callback) => {
-    if (!origin) return callback(null, true);
-    if (origin.includes(".vercel.app") || allowedOrigins.includes(origin)) {
+    // Allow requests with no origin (mobile apps, Postman, etc.)
+    if (!origin) {
+      console.log("✅ Allowing request with no origin");
       return callback(null, true);
     }
+
+    // Check if origin is in allowed list or is a Vercel deployment
+    if (allowedOrigins.includes(origin) || origin.includes(".vercel.app")) {
+      console.log("✅ CORS allowed for:", origin);
+      return callback(null, true);
+    }
+
     console.warn("⚠️ CORS blocked origin:", origin);
-    return callback(null, false);
+    callback(new Error("Not allowed by CORS"));
   },
   credentials: true,
   methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
-  allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With"],
+  allowedHeaders: [
+    "Content-Type",
+    "Authorization",
+    "X-Requested-With",
+    "Accept",
+    "Origin",
+  ],
   exposedHeaders: ["Authorization"],
+  preflightContinue: false,
+  optionsSuccessStatus: 204,
 };
+
+// ✅ Apply CORS before other middleware
 app.use(cors(corsOptions));
+
+// ✅ Explicitly handle OPTIONS requests
+app.options("*", cors(corsOptions));
 
 // -----------------------------
 // 🧰 MIDDLEWARE
@@ -58,6 +79,7 @@ app.use(express.urlencoded({ extended: true, limit: "50mb" }));
 
 app.use((req: Request, _res: Response, next: NextFunction) => {
   console.log(`[${new Date().toISOString()}] ${req.method} ${req.originalUrl}`);
+  console.log("Origin:", req.headers.origin || "no origin");
   next();
 });
 
@@ -81,11 +103,13 @@ app.get("/health", (_req: Request, res: Response) => {
   });
 });
 
+// Routes
 app.use("/api/auth", authRoutes);
 app.use("/api/meals", mealRoutes);
 app.use("/api/users", userRoutes);
 app.use("/ai", aiRoutes);
 
+// 404 handler
 app.use((req: Request, res: Response) => {
   console.warn("❌ 404 Not Found:", req.method, req.path);
   res.status(404).json({
@@ -95,6 +119,7 @@ app.use((req: Request, res: Response) => {
   });
 });
 
+// Error handler
 app.use(
   (
     err: Error & { status?: number },
@@ -126,7 +151,9 @@ const connectDB = async (retries = 5): Promise<void> => {
     } catch (err: any) {
       console.error(`❌ Connection attempt ${attempt} failed:`, err.message);
       if (attempt === retries) throw err;
-      await new Promise((r) => setTimeout(r, Math.min(1000 * 2 ** attempt, 10000)));
+      await new Promise((r) =>
+        setTimeout(r, Math.min(1000 * 2 ** attempt, 10000))
+      );
     }
   }
 };
