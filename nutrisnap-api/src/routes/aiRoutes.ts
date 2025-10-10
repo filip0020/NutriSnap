@@ -3,7 +3,7 @@ import fs from 'fs';
 import path from 'path';
 import os from 'os';
 import multer from 'multer';
-import axios, { AxiosResponse } from 'axios';
+import axios from 'axios';
 import protect from '../middleware/auth';
 import { AuthRequest } from '../models/User';
 
@@ -209,165 +209,256 @@ const upload = multer({
   }
 });
 
-const HUGGINGFACE_API_KEY = process.env.HUGGINGFACE_API_KEY || '';
+// 🔑 Get API key from environment
+const REPLICATE_API_KEY = process.env.REPLICATE_API_KEY || '';
 
-console.log('🔑 Hugging Face API Key status:', HUGGINGFACE_API_KEY ? 'SET ✅' : 'NOT SET ❌');
+console.log('🔑 Replicate API Key status:', REPLICATE_API_KEY ? 'SET ✅' : 'NOT SET ❌');
 
-// ✅ UPDATED OCTOBER 2025 - Working Models with better retry logic
-const MODELS_TO_TRY = [
-  // BLIP models - Most reliable for food/object detection
-  { name: 'Salesforce/blip-image-captioning-base', priority: 1 },
-  { name: 'Salesforce/blip-image-captioning-large', priority: 2 },
+/**
+ * ✨ Analyze image with Replicate AI (BLIP-2 or LLaVA)
+ * FREE TIER: Generous free credits, no geographic restrictions
+ * Works worldwide - perfect for Moldova! 🇲🇩
+ */
+async function analyzeWithReplicate(imageBuffer: Buffer): Promise<string> {
+  if (!REPLICATE_API_KEY) {
+    throw new Error('REPLICATE_API_KEY is not configured. Get a free key at: https://replicate.com/account/api-tokens');
+  }
 
-  // ViT-GPT2 models - Good for general captions
-  { name: 'nlpconnect/vit-gpt2-image-captioning', priority: 3 },
-  { name: 'ydshieh/vit-gpt2-coco-en', priority: 4 },
+  const base64Image = imageBuffer.toString('base64');
+  let mimeType = 'image/jpeg';
 
-  // Alternative models
-  { name: 'microsoft/git-base-coco', priority: 5 },
-  { name: 'microsoft/git-large-coco', priority: 6 }
-];
+  if (imageBuffer[0] === 0x89 && imageBuffer[1] === 0x50) {
+    mimeType = 'image/png';
+  } else if (imageBuffer[0] === 0xFF && imageBuffer[1] === 0xD8) {
+    mimeType = 'image/jpeg';
+  }
 
-interface ModelAttemptResult {
-  success: boolean;
-  description?: string;
-  error?: string;
-  modelName: string;
-  status?: number;
-}
+  const dataUri = `data:${mimeType};base64,${base64Image}`;
 
-async function tryModelWithRetry(
-  modelName: string,
-  imageBuffer: Buffer,
-  retries: number = 2
-): Promise<ModelAttemptResult> {
-  const API_URL = `https://api-inference.huggingface.co/models/${modelName}`;
+  try {
+    console.log('🚀 Starting prediction with Replicate BLIP-2...');
 
-  for (let attempt = 1; attempt <= retries; attempt++) {
-    try {
-      console.log(`🔄 [Attempt ${attempt}/${retries}] Trying model: ${modelName}`);
-
-      const resp: AxiosResponse = await axios.post(API_URL, imageBuffer, {
+    // Create prediction with BLIP-2 model (excellent for food)
+    const createResponse = await axios.post(
+      'https://api.replicate.com/v1/predictions',
+      {
+        version: 'blip-2-opt-2.7b version (food-optimized)',
+        input: {
+          image: dataUri,
+          prompt: 'Describe this food in detail, including type, portion size, and ingredients. Keep it under 50 words.'
+        }
+      },
+      {
         headers: {
-          Authorization: `Bearer ${HUGGINGFACE_API_KEY}`,
-          'Content-Type': 'application/octet-stream'
+          'Authorization': `Token ${REPLICATE_API_KEY}`,
+          'Content-Type': 'application/json'
         },
-        timeout: 30000
-      });
+        timeout: 10000
+      }
+    );
 
-      const data = resp.data;
-      let description = '';
+    const predictionId = createResponse.data.id;
+    console.log('📊 Prediction created:', predictionId);
 
-      // Parse different response formats
-      if (Array.isArray(data) && data.length > 0) {
-        description = data[0]?.generated_text || '';
-      } else if (typeof data === 'object' && data.generated_text) {
-        description = data.generated_text;
-      } else if (typeof data === 'string') {
-        description = data;
+    // Poll for result (max 30 seconds)
+    let attempts = 0;
+    const maxAttempts = 30;
+
+    while (attempts < maxAttempts) {
+      await new Promise(resolve => setTimeout(resolve, 1000));
+
+      const statusResponse = await axios.get(
+        `https://api.replicate.com/v1/predictions/${predictionId}`,
+        {
+          headers: {
+            'Authorization': `Token ${REPLICATE_API_KEY}`
+          },
+          timeout: 10000
+        }
+      );
+
+      const status = statusResponse.data.status;
+      console.log(`🔄 Attempt ${attempts + 1}/${maxAttempts} - Status: ${status}`);
+
+      if (status === 'succeeded') {
+        const output = statusResponse.data.output;
+        const description = Array.isArray(output) ? output.join(' ') : output;
+
+        if (description && description.length > 5) {
+          console.log('✅ Replicate analysis successful:', description);
+          return description.trim();
+        }
       }
 
-      if (description && description.length > 3) {
-        console.log(`✅ SUCCESS with ${modelName}: "${description}"`);
-        return {
-          success: true,
-          description,
-          modelName
-        };
+      if (status === 'failed') {
+        throw new Error('Replicate prediction failed');
       }
 
-      console.log(`⚠️ Model ${modelName} returned empty description`);
+      attempts++;
+    }
 
-    } catch (err: any) {
-      const status = err?.response?.status;
-      const errorData = err?.response?.data;
+    throw new Error('Replicate prediction timed out after 30 seconds');
 
-      console.log(`❌ [Attempt ${attempt}/${retries}] Model ${modelName} failed:`, {
-        status,
-        error: errorData?.error || err.message
-      });
+  } catch (error: any) {
+    console.error('❌ Replicate API error:', error.response?.data || error.message);
 
-      // If it's loading (503), wait and retry
-      if (status === 503 && attempt < retries) {
-        const waitTime = 2000 * attempt; // Exponential backoff
-        console.log(`⏳ Model loading, waiting ${waitTime}ms before retry...`);
-        await new Promise(resolve => setTimeout(resolve, waitTime));
-        continue;
+    if (error.response?.status === 401) {
+      throw new Error('Invalid Replicate API key. Please check your REPLICATE_API_KEY.');
+    }
+
+    if (error.response?.status === 429) {
+      throw new Error('Replicate rate limit exceeded. Please wait a moment.');
+    }
+
+    async function analyzeWithReplicate(imageBuffer: Buffer): Promise<string> {
+      if (!REPLICATE_API_KEY) {
+        throw new Error('REPLICATE_API_KEY is not configured. Get a free key at: https://replicate.com/account/api-tokens');
       }
 
-      // If it's rate limit (429), skip to next model
-      if (status === 429) {
-        return {
-          success: false,
-          error: 'Rate limit exceeded',
-          modelName,
-          status
-        };
+      const base64Image = imageBuffer.toString('base64');
+      let mimeType = 'image/jpeg';
+
+      if (imageBuffer[0] === 0x89 && imageBuffer[1] === 0x50) {
+        mimeType = 'image/png';
+      } else if (imageBuffer[0] === 0xFF && imageBuffer[1] === 0xD8) {
+        mimeType = 'image/jpeg';
       }
 
-      // Last attempt failed
-      if (attempt === retries) {
-        return {
-          success: false,
-          error: errorData?.error || err.message,
-          modelName,
-          status
-        };
+      const dataUri = `data:${mimeType};base64,${base64Image}`;
+      let attempts = 0; // ✅ moved here (so catch can see it)
+
+      try {
+        console.log('🚀 Starting prediction with Replicate BLIP-2...');
+
+        const createResponse = await axios.post(
+          'https://api.replicate.com/v1/predictions',
+          {
+            // ✅ fixed version field — must be a valid model ID
+            version: 'a16dd1e1c20503672af52d7c9a68d8999a6c3a9a26b2cd8a11d6a9f52b7a6c9c',
+            input: {
+              image: dataUri,
+              prompt: 'Describe this food in detail, including type, portion size, and ingredients. Keep it under 50 words.'
+            }
+          },
+          {
+            headers: {
+              Authorization: `Token ${REPLICATE_API_KEY}`,
+              'Content-Type': 'application/json'
+            },
+            timeout: 10000
+          }
+        );
+
+        const predictionId = createResponse.data.id;
+        console.log('📊 Prediction created:', predictionId);
+
+        const maxAttempts = 30;
+
+        while (attempts < maxAttempts) {
+          await new Promise(resolve => setTimeout(resolve, 1000));
+
+          const statusResponse = await axios.get(
+            `https://api.replicate.com/v1/predictions/${predictionId}`,
+            {
+              headers: { Authorization: `Token ${REPLICATE_API_KEY}` },
+              timeout: 10000
+            }
+          );
+
+          const status = statusResponse.data.status;
+          console.log(`🔄 Attempt ${attempts + 1}/${maxAttempts} - Status: ${status}`);
+
+          if (status === 'succeeded') {
+            const output = statusResponse.data.output;
+            const description = Array.isArray(output) ? output.join(' ') : output;
+
+            if (description && description.length > 5) {
+              console.log('✅ Replicate analysis successful:', description);
+              return description.trim();
+            }
+          }
+
+          if (status === 'failed') throw new Error('Replicate prediction failed');
+          attempts++;
+        }
+
+        throw new Error('Replicate prediction timed out after 30 seconds');
+
+      } catch (error: any) {
+        console.error('❌ Replicate API error:', error.response?.data || error.message);
+
+        if (error.response?.status === 401) {
+          throw new Error('Invalid Replicate API key. Please check your REPLICATE_API_KEY.');
+        }
+
+        if (error.response?.status === 429) {
+          throw new Error('Replicate rate limit exceeded. Please wait a moment.');
+        }
+
+        // ✅ Fixed: ensure `attempts` is visible here
+        if (attempts === 0) {
+          console.log('⚠️ Trying fallback BLIP model...');
+          return await analyzeWithSimpleBLIP(dataUri);
+        }
+
+        throw new Error(`Failed to analyze image: ${error.message}`);
       }
     }
-  }
 
-  return {
-    success: false,
-    error: 'All retries exhausted',
-    modelName
-  };
+
+    throw new Error(`Failed to analyze image: ${error.message}`);
+  }
 }
 
-async function analyzeWithHuggingFace(imageBuffer: Buffer): Promise<string> {
-  if (!HUGGINGFACE_API_KEY) {
-    throw new Error('HUGGINGFACE_API_KEY is not configured. Please set it in your environment variables.');
-  }
+/**
+ * Fallback: Simple BLIP model (faster, more reliable)
+ */
+async function analyzeWithSimpleBLIP(dataUri: string): Promise<string> {
+  try {
+    const createResponse = await axios.post(
+      'https://api.replicate.com/v1/predictions',
+      {
+        version: '2e1dddc8621f72155f24cf2e0adbde548458d3cab9f00c0139eea840d0ac4746',
+        input: {
+          image: dataUri,
+          task: 'image_captioning'
+        }
+      },
+      {
+        headers: {
+          'Authorization': `Token ${REPLICATE_API_KEY}`,
+          'Content-Type': 'application/json'
+        },
+        timeout: 10000
+      }
+    );
 
-  console.log(`🚀 Starting image analysis with ${MODELS_TO_TRY.length} models...`);
+    const predictionId = createResponse.data.id;
+    let attempts = 0;
 
-  const results: ModelAttemptResult[] = [];
+    while (attempts < 20) {
+      await new Promise(resolve => setTimeout(resolve, 1000));
 
-  // Try each model in priority order
-  for (const model of MODELS_TO_TRY) {
-    const result = await tryModelWithRetry(model.name, imageBuffer, 2);
-    results.push(result);
+      const statusResponse = await axios.get(
+        `https://api.replicate.com/v1/predictions/${predictionId}`,
+        {
+          headers: { 'Authorization': `Token ${REPLICATE_API_KEY}` }
+        }
+      );
 
-    if (result.success && result.description) {
-      console.log(`✅ Analysis complete using model: ${model.name}`);
-      return result.description;
+      if (statusResponse.data.status === 'succeeded') {
+        const output = statusResponse.data.output;
+        return Array.isArray(output) ? output[0] : output;
+      }
+
+      attempts++;
     }
 
-    // Small delay between models to avoid rate limiting
-    await new Promise(resolve => setTimeout(resolve, 500));
+    throw new Error('Fallback model timed out');
+  } catch (err: any) {
+    console.error('❌ Fallback model failed:', err.message);
+    throw err;
   }
-
-  // All models failed - create detailed error message
-  console.error('❌ All models failed. Results:', results);
-
-  const loadingModels = results.filter(r => r.status === 503);
-  const rateLimited = results.filter(r => r.status === 429);
-
-  if (loadingModels.length > 0) {
-    throw new Error(
-      `HuggingFace models are currently loading. This typically takes 20-30 seconds. Please try again in a moment. (${loadingModels.length}/${results.length} models loading)`
-    );
-  }
-
-  if (rateLimited.length > 0) {
-    throw new Error(
-      `Rate limit exceeded on HuggingFace API. Please wait a moment before trying again. Consider upgrading your API tier for higher limits.`
-    );
-  }
-
-  throw new Error(
-    `Unable to analyze image with HuggingFace models. All ${results.length} models failed. Please check your API key and try again later.`
-  );
 }
 
 const skipAuth = process.env.SKIP_AUTH === 'true';
@@ -390,7 +481,7 @@ router.post(
       const imageBuffer = await fs.promises.readFile(filePath);
       console.log('✅ Image loaded into buffer');
 
-      const description = await analyzeWithHuggingFace(imageBuffer);
+      const description = await analyzeWithReplicate(imageBuffer);
       console.log('🔍 AI Description:', description);
 
       const nutritionInfo = analyzeFoodFromDescription(description);
@@ -440,9 +531,9 @@ router.post(
 router.get('/health', (req: Request, res: Response) => {
   res.json({
     status: 'ok',
-    aiProvider: 'Hugging Face',
-    models: MODELS_TO_TRY.map(m => m.name),
-    apiConfigured: !!HUGGINGFACE_API_KEY,
+    aiProvider: 'Replicate AI',
+    model: 'BLIP-2 + BLIP fallback',
+    apiConfigured: !!REPLICATE_API_KEY,
     foodDatabaseSize: Object.keys(foodDatabase).length,
     timestamp: new Date().toISOString()
   });

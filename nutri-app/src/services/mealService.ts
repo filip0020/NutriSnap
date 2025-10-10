@@ -28,7 +28,7 @@ export interface MealReport {
 }
 
 export const addMeal = async (meal: Meal): Promise<Meal> => {
-  const response = await apiClient.post<Meal>('/meals', meal);
+  const response = await apiClient.post<Meal>('/api/meals', meal);
   return response.data;
 };
 
@@ -38,6 +38,6 @@ export const getMealReport = async (
 ): Promise<MealReport> => {
   const params: any = { period };
   if (date) params.date = date;
-  const response = await apiClient.get<MealReport>('/meals/report', { params });
+  const response = await apiClient.get<MealReport>('/api/meals/report', { params });
   return response.data;
 };

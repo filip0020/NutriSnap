@@ -27,7 +27,6 @@ export const useAuthStore = defineStore('auth', () => {
     return hasToken && hasUser;
   });
 
-  // Initialize - verifică dacă utilizatorul este deja autentificat
   const initialize = async () => {
     // ✅ First check if tokens exist and are valid (client-side check)
     if (!checkAuth()) {

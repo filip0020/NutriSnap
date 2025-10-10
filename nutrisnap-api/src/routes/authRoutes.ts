@@ -216,7 +216,6 @@ router.post('/logout-all', protect, async (req: AuthRequest, res: Response): Pro
   }
 });
 
-// Update Profile
 router.put('/profile', protect, async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const userId = req.user!.id;
