@@ -149,16 +149,13 @@ function analyzeFoodFromDescription(description: string) {
   for (const [foodName, nutrition] of Object.entries(foodDatabase)) {
     let score = 0;
 
-    // Exact match
     if (lowerDesc.includes(foodName)) score += 10;
 
-    // Word match
     const foodWords = foodName.split(' ');
     for (const fw of foodWords) {
       if (fw.length >= 3 && words.includes(fw)) score += 5;
     }
 
-    // Partial word match (word boundaries)
     for (const w of words) {
       if (w.length >= 4) {
         const regex = new RegExp(`\\b${w}\\b`, 'i');
@@ -216,83 +213,71 @@ const HUGGINGFACE_API_KEY = process.env.HUGGINGFACE_API_KEY || '';
 
 console.log('🔑 Hugging Face API Key status:', HUGGINGFACE_API_KEY ? 'SET ✅' : 'NOT SET ❌');
 
-// ✅ CORRECT MODEL URL - Salesforce BLIP is reliable and works with read tokens
-async function analyzeWithHuggingFace(imageBuffer: Buffer, retries = 3): Promise<string> {
-  if (!HUGGINGFACE_API_KEY) throw new Error('HUGGINGFACE_API_KEY is not set');
+// ✅ MULTIPLE MODELS - Try each until one works (October 2025 verified)
+const MODELS_TO_TRY = [
+  'nlpconnect/vit-gpt2-image-captioning',
+  'Salesforce/blip-image-captioning-base',
+  'Salesforce/blip-image-captioning-large',
+  'ydshieh/vit-gpt2-coco-en'
+];
 
-  // ✅ THIS IS THE CORRECT MODEL PATH THAT WORKS!
-  const API_URL = 'https://api-inference.huggingface.co/models/Salesforce/blip-image-captioning-base';
+async function tryModel(modelName: string, imageBuffer: Buffer): Promise<string | null> {
+  const API_URL = `https://api-inference.huggingface.co/models/${modelName}`;
 
-  for (let i = 0; i < retries; i++) {
-    try {
-      console.log(`📤 Attempt ${i + 1}/${retries} to Hugging Face (Salesforce BLIP)...`);
+  try {
+    console.log(`🔄 Trying model: ${modelName}`);
 
-      const resp: AxiosResponse = await axios.post(API_URL, imageBuffer, {
-        headers: {
-          Authorization: `Bearer ${HUGGINGFACE_API_KEY}`,
-          'Content-Type': 'application/octet-stream'
-        },
-        timeout: 60000
-      });
+    const resp: AxiosResponse = await axios.post(API_URL, imageBuffer, {
+      headers: {
+        Authorization: `Bearer ${HUGGINGFACE_API_KEY}`,
+        'Content-Type': 'application/octet-stream'
+      },
+      timeout: 30000
+    });
 
-      const data = resp.data;
-      console.log('✅ Raw HF response:', JSON.stringify(data).substring(0, 200));
+    const data = resp.data;
+    let description = '';
 
-      let description = '';
-
-      if (Array.isArray(data) && data.length > 0) {
-        // Format: [{ generated_text: "..." }]
-        description = data[0]?.generated_text || '';
-      } else if (typeof data === 'object' && data.generated_text) {
-        description = data.generated_text;
-      } else if (typeof data === 'string') {
-        description = data;
-      }
-
-      if (!description) {
-        throw new Error('No caption returned from model');
-      }
-
-      console.log('✅ Parsed description:', description);
-      return description;
-
-    } catch (err: any) {
-      const status = err?.response?.status;
-      const respData = err?.response?.data;
-
-      console.error(`❌ HF attempt ${i + 1} failed`, {
-        message: err.message,
-        status,
-        data: respData
-      });
-
-      // Model loading
-      if (status === 503) {
-        if (i < retries - 1) {
-          const wait = Math.min(20000 * (i + 1), 60000);
-          console.log(`⏳ Model loading, waiting ${wait}ms...`);
-          await new Promise((r) => setTimeout(r, wait));
-          continue;
-        }
-        throw new Error('Model is loading on Hugging Face. Try again in 1-2 minutes.');
-      }
-
-      // Model not found
-      if (status === 404) {
-        throw new Error(`Model not found. Please verify the API key and model path.`);
-      }
-
-      // Last retry
-      if (i === retries - 1) {
-        const msg = respData?.error || respData || err.message;
-        throw new Error(`Hugging Face request failed: ${String(msg)}`);
-      }
-
-      await new Promise((r) => setTimeout(r, 2000));
+    if (Array.isArray(data) && data.length > 0) {
+      description = data[0]?.generated_text || '';
+    } else if (typeof data === 'object' && data.generated_text) {
+      description = data.generated_text;
+    } else if (typeof data === 'string') {
+      description = data;
     }
+
+    if (description) {
+      console.log(`✅ SUCCESS with ${modelName}: ${description}`);
+      return description;
+    }
+
+    return null;
+  } catch (err: any) {
+    const status = err?.response?.status;
+    console.log(`❌ Model ${modelName} failed with status ${status}`);
+    return null;
+  }
+}
+
+async function analyzeWithHuggingFace(imageBuffer: Buffer): Promise<string> {
+  if (!HUGGINGFACE_API_KEY) {
+    throw new Error('HUGGINGFACE_API_KEY is not set');
   }
 
-  throw new Error('Failed to get response from Hugging Face after retries');
+  console.log(`🚀 Starting image analysis with ${MODELS_TO_TRY.length} models...`);
+
+  // Try each model
+  for (const modelName of MODELS_TO_TRY) {
+    const result = await tryModel(modelName, imageBuffer);
+    if (result) {
+      return result;
+    }
+    // Small delay between attempts
+    await new Promise(r => setTimeout(r, 500));
+  }
+
+  // If all models fail, throw error
+  throw new Error('All HuggingFace models failed. Models may be loading or temporarily unavailable. Please try again in 30 seconds.');
 }
 
 const skipAuth = process.env.SKIP_AUTH === 'true';
@@ -366,7 +351,7 @@ router.get('/health', (req: Request, res: Response) => {
   res.json({
     status: 'ok',
     aiProvider: 'Hugging Face',
-    model: 'Salesforce/blip-image-captioning-base',
+    models: MODELS_TO_TRY,
     apiConfigured: !!HUGGINGFACE_API_KEY,
     foodDatabaseSize: Object.keys(foodDatabase).length,
     timestamp: new Date().toISOString()
