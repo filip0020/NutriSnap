@@ -453,22 +453,22 @@ router.get('/health', async (req: Request, res: Response) => {
 });
 
 // 🧪 Test endpoint to verify API key
-router.get('/test-api-key', async (req: Request, res: Response) => {
+router.get('/test-api-key', async (req: Request, res: Response): Promise<void> => {
   console.log('🧪 API Key test requested');
 
   if (!HUGGINGFACE_API_KEY) {
-    return res.status(500).json({
+    res.status(500).json({
       error: 'API key not set',
       solution: 'Add HUGGINGFACE_API_KEY to Render environment variables'
     });
+    return;
   }
 
   try {
-    // Test with a simple API call
     const testUrl = 'https://api-inference.huggingface.co/models/Salesforce/blip-image-captioning-base';
     const response = await axios.get(testUrl, {
       headers: {
-        'Authorization': `Bearer ${HUGGINGFACE_API_KEY}`
+        Authorization: `Bearer ${HUGGINGFACE_API_KEY}`
       },
       timeout: 10000
     });
@@ -479,6 +479,7 @@ router.get('/test-api-key', async (req: Request, res: Response) => {
       status: response.status,
       model: 'Salesforce/blip-image-captioning-base'
     });
+    return;
 
   } catch (err: any) {
     const status = err?.response?.status;
@@ -489,9 +490,13 @@ router.get('/test-api-key', async (req: Request, res: Response) => {
       error: 'API key test failed',
       status,
       message: errorData?.error || err.message,
-      solution: status === 401 ? 'Invalid API key - generate a new one' : 'Unknown error'
+      solution: status === 401
+        ? 'Invalid API key - generate a new one'
+        : 'Unknown error'
     });
+    return;
   }
 });
+
 
 export default router;
