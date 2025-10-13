@@ -24,9 +24,6 @@ if (!fs.existsSync(uploadsDir)) {
   console.log("📁 Created uploads folder");
 }
 
-// -----------------------------
-// 🔒 CORS CONFIGURATION - FIXED
-// -----------------------------
 const allowedOrigins: string[] = [
   process.env.FRONTEND_URL || "",
   "http://localhost:3000",
@@ -116,7 +113,7 @@ app.get("/health", (_req: Request, res: Response) => {
 app.use("/api/auth", authRoutes);
 app.use("/api/meals", mealRoutes);
 app.use("/api/users", userRoutes);
-app.use("/ai", aiRoutes); // ✅ Correct path for AI routes
+app.use("/api/ai", aiRoutes);
 
 // 404 handler
 app.use((req: Request, res: Response) => {
