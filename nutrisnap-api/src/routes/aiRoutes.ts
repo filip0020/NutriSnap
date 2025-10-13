@@ -3,7 +3,7 @@ import fs from 'fs';
 import path from 'path';
 import os from 'os';
 import multer from 'multer';
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { GoogleGenAI } from '@google/genai';
 import protect from '../middleware/auth';
 import { AuthRequest } from '../models/User';
 
@@ -13,12 +13,12 @@ const router = express.Router();
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY || '';
 console.log('🔑 Gemini API Key:', GEMINI_API_KEY ? `SET ✅ (${GEMINI_API_KEY.substring(0, 10)}...)` : 'NOT SET ❌');
 
-// Inițializează Gemini
-let genAI: GoogleGenerativeAI | null = null;
+// Inițializează Gemini cu noul API
+let genAI: GoogleGenAI | null = null;
 if (GEMINI_API_KEY) {
   try {
-    genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
-    console.log('✅ Gemini AI initialized successfully');
+    genAI = new GoogleGenAI({ apiKey: GEMINI_API_KEY });
+    console.log('✅ Gemini AI initialized successfully with new API');
   } catch (error) {
     console.error('❌ Failed to initialize Gemini:', error);
   }
@@ -68,19 +68,11 @@ interface FoodAnalysis {
   notes: string;
 }
 
-// 🤖 Analizează imaginea cu Gemini
+// 🤖 Analizează imaginea cu Gemini (NEW API)
 async function analyzeWithGemini(buffer: Buffer, mimeType: string): Promise<FoodAnalysis> {
   if (!genAI) {
     throw new Error('Gemini AI not initialized. Check GEMINI_API_KEY in environment.');
   }
-
-  const model = genAI.getGenerativeModel({
-    model: 'gemini-1.5-flash',
-    generationConfig: {
-      temperature: 0.4,
-      maxOutputTokens: 2048,
-    }
-  });
 
   // Prompt EXTREM de detaliat pentru analiză nutrițională
   const prompt = `You are an expert nutritionist and food analyst. Analyze this food image in EXTREME detail.
@@ -124,19 +116,33 @@ IMPORTANT RULES:
 - Always return valid JSON only`;
 
   try {
-    console.log('🔄 Sending image to Gemini API...');
+    console.log('🔄 Sending image to Gemini API (NEW VERSION)...');
 
-    // Convertește buffer-ul în format compatibil Gemini
-    const imagePart = {
-      inlineData: {
-        data: buffer.toString('base64'),
-        mimeType: mimeType
-      }
-    };
+    // Convertește buffer-ul în base64
+    const base64Image = buffer.toString('base64');
 
-    const result = await model.generateContent([prompt, imagePart]);
-    const response = await result.response;
-    const text = response.text();
+    // Noul format pentru API
+    const contents = [
+      {
+        inlineData: {
+          mimeType: mimeType,
+          data: base64Image,
+        },
+      },
+      { text: prompt },
+    ];
+
+    // Apelează noul API
+    const response = await genAI.models.generateContent({
+      model: 'gemini-2.5-flash',
+      contents: contents,
+    });
+
+    const text = response.text;
+
+    if (!text) {
+      throw new Error('Empty response from Gemini API');
+    }
 
     console.log('📥 Gemini raw response length:', text.length);
     console.log('📄 First 300 chars:', text.substring(0, 300));
@@ -176,7 +182,7 @@ IMPORTANT RULES:
   } catch (error: any) {
     console.error('❌ Gemini API error:', error.message);
     if (error.response) {
-      console.error('Response data:', error.response.data);
+      console.error('Response data:', error.response);
     }
     throw new Error(`AI analysis failed: ${error.message}`);
   }
@@ -263,7 +269,7 @@ router.post(
       // Încearcă cu Gemini AI
       if (genAI) {
         try {
-          console.log('🤖 Attempting AI analysis with Gemini...');
+          console.log('🤖 Attempting AI analysis with Gemini 2.5 Flash...');
           analysis = await analyzeWithGemini(buffer, file.mimetype);
           usedAI = true;
           console.log(`✅ AI Success: ${analysis.items.length} item(s) detected`);
@@ -291,7 +297,7 @@ router.post(
         },
         metadata: {
           usedAI,
-          aiProvider: usedAI ? 'Google Gemini 1.5 Flash' : 'Fallback Detection',
+          aiProvider: usedAI ? 'Google Gemini 2.5 Flash' : 'Fallback Detection',
           timestamp: new Date().toISOString(),
           ...(errorMessage && !usedAI ? { warning: errorMessage } : {})
         }
@@ -329,7 +335,7 @@ router.get('/health', (req: Request, res: Response) => {
   res.json({
     status: 'ok',
     service: 'NutriSnap AI Food Analyzer',
-    aiProvider: 'Google Gemini 1.5 Flash',
+    aiProvider: 'Google Gemini 2.5 Flash',
     apiConfigured: !!GEMINI_API_KEY,
     aiInitialized: !!genAI,
     features: [
