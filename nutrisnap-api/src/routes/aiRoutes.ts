@@ -3,174 +3,236 @@ import fs from 'fs';
 import path from 'path';
 import os from 'os';
 import multer from 'multer';
-import axios from 'axios';
-import FormData from 'form-data';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 import protect from '../middleware/auth';
 import { AuthRequest } from '../models/User';
 
 const router = express.Router();
 
-const HUGGINGFACE_API_KEY = process.env.HUGGINGFACE_API_KEY || '';
+// 🔑 Gemini API Key - citește din ENV
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY || '';
+console.log('🔑 Gemini API Key:', GEMINI_API_KEY ? `SET ✅ (${GEMINI_API_KEY.substring(0, 10)}...)` : 'NOT SET ❌');
 
-console.log('🔑 HF API Key:', HUGGINGFACE_API_KEY ? `SET ✅` : 'NOT SET ❌');
+// Inițializează Gemini
+let genAI: GoogleGenerativeAI | null = null;
+if (GEMINI_API_KEY) {
+  try {
+    genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
+    console.log('✅ Gemini AI initialized successfully');
+  } catch (error) {
+    console.error('❌ Failed to initialize Gemini:', error);
+  }
+} else {
+  console.warn('⚠️ GEMINI_API_KEY not found in environment variables!');
+}
 
-// 📁 Temp
+// 📁 Temp directory
 const tmpDir = path.join(os.tmpdir(), 'nutrisnap_uploads');
-try { fs.mkdirSync(tmpDir, { recursive: true }); } catch { /* exists */ }
+try {
+  fs.mkdirSync(tmpDir, { recursive: true });
+  console.log('📁 Temp directory:', tmpDir);
+} catch { /* exists */ }
 
-// 📤 Multer
+// 📤 Multer setup
 const upload = multer({
   dest: tmpDir,
-  limits: { fileSize: 10 * 1024 * 1024 },
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB
   fileFilter: (req, file, cb) => {
     const allowed = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
-    allowed.includes(file.mimetype) ? cb(null, true) : cb(new Error('Invalid file'));
+    if (allowed.includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new Error(`Invalid file type: ${file.mimetype}. Allowed: JPEG, PNG, WebP`));
+    }
   }
 });
 
-// 🍔 Food DB
-interface Food {
-  calories: number;
-  protein: number;
-  carbs: number;
-  fats: number;
-  weight: number;
+// 🍔 Interfața pentru răspunsul AI
+interface FoodAnalysis {
+  items: Array<{
+    name: string;
+    quantity: number;
+    unit: string;
+    weight_grams: number;
+    ingredients: string[];
+    description: string;
+  }>;
+  total_nutrition: {
+    calories: number;
+    protein: number;
+    carbs: number;
+    fats: number;
+    fiber?: number;
+  };
+  confidence: 'high' | 'medium' | 'low';
+  notes: string;
 }
 
-const FOODS: Record<string, Food> = {
-  'pizza': { calories: 266, protein: 11, carbs: 33, fats: 10, weight: 100 },
-  'burger': { calories: 295, protein: 17, carbs: 24, fats: 14, weight: 150 },
-  'hamburger': { calories: 295, protein: 17, carbs: 24, fats: 14, weight: 150 },
-  'pasta': { calories: 131, protein: 5, carbs: 25, fats: 1, weight: 150 },
-  'spaghetti': { calories: 158, protein: 6, carbs: 31, fats: 1, weight: 150 },
-  'chicken': { calories: 239, protein: 27, carbs: 0, fats: 14, weight: 150 },
-  'rice': { calories: 130, protein: 2.7, carbs: 28, fats: 0.3, weight: 150 },
-  'salad': { calories: 33, protein: 2.5, carbs: 6, fats: 0.3, weight: 200 },
-  'steak': { calories: 271, protein: 25, carbs: 0, fats: 19, weight: 200 },
-  'fish': { calories: 206, protein: 22, carbs: 0, fats: 12, weight: 150 },
-  'salmon': { calories: 208, protein: 20, carbs: 0, fats: 13, weight: 150 },
-  'eggs': { calories: 155, protein: 13, carbs: 1.1, fats: 11, weight: 100 },
-  'sandwich': { calories: 250, protein: 15, carbs: 30, fats: 8, weight: 150 },
-  'fries': { calories: 312, protein: 3.4, carbs: 41, fats: 15, weight: 100 },
-  'soup': { calories: 71, protein: 5.5, carbs: 9, fats: 2, weight: 250 },
-  'bread': { calories: 265, protein: 9, carbs: 49, fats: 3.2, weight: 50 },
-  'cake': { calories: 257, protein: 2.6, carbs: 42, fats: 9, weight: 100 }
-};
-
-// 🔍 Match food
-function matchFood(desc: string) {
-  const lower = desc.toLowerCase();
-  let best: { name: string; food: Food } | null = null;
-  let score = 0;
-
-  for (const [name, food] of Object.entries(FOODS)) {
-    const s = lower.includes(name) ? 15 : 0;
-    if (s > score) {
-      score = s;
-      best = { name, food };
-    }
+// 🤖 Analizează imaginea cu Gemini
+async function analyzeWithGemini(buffer: Buffer, mimeType: string): Promise<FoodAnalysis> {
+  if (!genAI) {
+    throw new Error('Gemini AI not initialized. Check GEMINI_API_KEY in environment.');
   }
 
-  if (best && score >= 15) {
-    return {
-      mealName: best.name.charAt(0).toUpperCase() + best.name.slice(1),
-      ...best.food,
-      confidence: 'high'
+  const model = genAI.getGenerativeModel({
+    model: 'gemini-1.5-flash',
+    generationConfig: {
+      temperature: 0.4,
+      maxOutputTokens: 2048,
+    }
+  });
+
+  // Prompt EXTREM de detaliat pentru analiză nutrițională
+  const prompt = `You are an expert nutritionist and food analyst. Analyze this food image in EXTREME detail.
+
+CRITICAL INSTRUCTIONS:
+1. Count EXACTLY how many items/portions are visible (e.g., "2 kebabs" not "1 kebab")
+2. Identify ALL visible ingredients
+3. Estimate the weight/portion size accurately based on visual cues
+4. Distinguish between types (e.g., "pepperoni pizza" vs "margherita pizza")
+5. Calculate nutritional values based on what you ACTUALLY SEE in the image
+6. If you see multiple items, multiply nutrition accordingly
+
+Return ONLY valid JSON (no markdown, no code blocks, no explanation):
+{
+  "items": [
+    {
+      "name": "Specific food name (e.g., 'Chicken Kebab with Vegetables')",
+      "quantity": 2,
+      "unit": "pieces",
+      "weight_grams": 300,
+      "ingredients": ["chicken", "pita bread", "lettuce", "tomato", "white sauce"],
+      "description": "Two grilled chicken kebabs wrapped in pita bread with fresh vegetables and sauce"
+    }
+  ],
+  "total_nutrition": {
+    "calories": 650,
+    "protein": 45,
+    "carbs": 58,
+    "fats": 24,
+    "fiber": 6
+  },
+  "confidence": "high",
+  "notes": "Clear view of 2 kebabs, each approximately 150g. Visible grilled chicken, fresh vegetables, white sauce."
+}
+
+IMPORTANT RULES:
+- If image shows 2 items, multiply all nutrition by 2
+- Be specific about ingredients you can actually see
+- Use realistic nutritional data for similar foods
+- confidence: "high" = clear image, "medium" = partially visible, "low" = unclear
+- Always return valid JSON only`;
+
+  try {
+    console.log('🔄 Sending image to Gemini API...');
+
+    // Convertește buffer-ul în format compatibil Gemini
+    const imagePart = {
+      inlineData: {
+        data: buffer.toString('base64'),
+        mimeType: mimeType
+      }
     };
+
+    const result = await model.generateContent([prompt, imagePart]);
+    const response = await result.response;
+    const text = response.text();
+
+    console.log('📥 Gemini raw response length:', text.length);
+    console.log('📄 First 300 chars:', text.substring(0, 300));
+
+    // Curăță răspunsul (elimină markdown dacă există)
+    let jsonText = text.trim();
+
+    // Elimină code blocks
+    if (jsonText.startsWith('```json')) {
+      jsonText = jsonText.replace(/```json\n?/g, '').replace(/```\n?$/g, '');
+    } else if (jsonText.startsWith('```')) {
+      jsonText = jsonText.replace(/```\n?/g, '');
+    }
+
+    // Elimină text înainte/după JSON
+    const jsonStart = jsonText.indexOf('{');
+    const jsonEnd = jsonText.lastIndexOf('}');
+    if (jsonStart !== -1 && jsonEnd !== -1) {
+      jsonText = jsonText.substring(jsonStart, jsonEnd + 1);
+    }
+
+    console.log('🧹 Cleaned JSON:', jsonText.substring(0, 200));
+
+    const analysis: FoodAnalysis = JSON.parse(jsonText);
+
+    // Validare strict
+    if (!analysis.items || !Array.isArray(analysis.items) || analysis.items.length === 0) {
+      throw new Error('Invalid response: missing items array');
+    }
+    if (!analysis.total_nutrition || typeof analysis.total_nutrition.calories !== 'number') {
+      throw new Error('Invalid response: missing or invalid total_nutrition');
+    }
+
+    console.log('✅ Parsed successfully:', analysis.items.length, 'items detected');
+    return analysis;
+
+  } catch (error: any) {
+    console.error('❌ Gemini API error:', error.message);
+    if (error.response) {
+      console.error('Response data:', error.response.data);
+    }
+    throw new Error(`AI analysis failed: ${error.message}`);
+  }
+}
+
+// 🎯 Fallback basic (dacă AI nu merge)
+function basicFallback(filename: string): FoodAnalysis {
+  const lower = filename.toLowerCase();
+
+  let mealName = 'Unknown Food';
+  let calories = 250;
+  let protein = 12;
+  let carbs = 30;
+  let fats = 10;
+  let weight = 200;
+
+  // Detecție simplă din nume fișier
+  if (lower.includes('pizza')) {
+    mealName = 'Pizza'; calories = 266; protein = 11; carbs = 33; fats = 10; weight = 100;
+  } else if (lower.includes('burger') || lower.includes('hamburger')) {
+    mealName = 'Burger'; calories = 295; protein = 17; carbs = 24; fats = 14; weight = 150;
+  } else if (lower.includes('kebab') || lower.includes('shawarma')) {
+    mealName = 'Kebab'; calories = 350; protein = 25; carbs = 35; fats = 12; weight = 200;
+  } else if (lower.includes('salad')) {
+    mealName = 'Salad'; calories = 150; protein = 8; carbs = 15; fats = 6; weight = 200;
+  } else if (lower.includes('pasta') || lower.includes('spaghetti')) {
+    mealName = 'Pasta'; calories = 158; protein = 6; carbs = 31; fats = 1; weight = 150;
+  } else if (lower.includes('chicken')) {
+    mealName = 'Chicken'; calories = 239; protein = 27; carbs = 0; fats = 14; weight = 150;
+  } else if (lower.includes('rice')) {
+    mealName = 'Rice'; calories = 130; protein = 2.7; carbs = 28; fats = 0.3; weight = 150;
   }
 
   return {
-    mealName: 'Unknown Food',
-    calories: 250,
-    protein: 12,
-    carbs: 30,
-    fats: 10,
-    weight: 150,
-    confidence: 'low'
+    items: [{
+      name: mealName,
+      quantity: 1,
+      unit: 'portion',
+      weight_grams: weight,
+      ingredients: ['Detected from filename'],
+      description: `${mealName} - analyzed from filename (AI unavailable)`
+    }],
+    total_nutrition: {
+      calories,
+      protein,
+      carbs,
+      fats
+    },
+    confidence: 'low',
+    notes: 'Fallback analysis used - AI not available or failed'
   };
 }
 
-// 🤖 HF API - CORRECT FORMAT for 2025
-async function analyzeWithHF(buffer: Buffer): Promise<string> {
-  if (!HUGGINGFACE_API_KEY) {
-    throw new Error('HUGGINGFACE_API_KEY not set in environment variables');
-  }
-
-  const models = [
-    'nlpconnect/vit-gpt2-image-captioning',
-    'Salesforce/blip-image-captioning-base'
-  ];
-
-  let url = ''; // definim aici, vizibil pentru tot for-ul
-
-  for (const model of models) {
-    try {
-      console.log(`🔄 Trying: ${model}`);
-
-      // construim URL-ul în interiorul buclei
-      url = `https://api-inference.huggingface.co/models/${model}`;
-
-      const resp = await axios.post(url, buffer, {
-        headers: {
-          'Authorization': `Bearer ${HUGGINGFACE_API_KEY}`,
-          'Content-Type': 'application/octet-stream'
-        },
-        timeout: 30000
-      });
-
-      let desc = '';
-      if (Array.isArray(resp.data) && resp.data[0]) {
-        desc = resp.data[0].generated_text || '';
-      } else if (resp.data?.generated_text) {
-        desc = resp.data.generated_text;
-      }
-
-      if (desc && desc.length > 3) {
-        console.log(`✅ Success: "${desc}"`);
-        return desc;
-      }
-
-    } catch (err: any) {
-      console.error(`❌ ${model} failed:`, err.response?.status, err.response?.data || err.message);
-
-      if (err.response?.status === 404) continue;
-
-      if (err.response?.status === 503) {
-        console.log('⏳ Model loading, waiting 5s...');
-        await new Promise(r => setTimeout(r, 5000));
-
-        try {
-          const retry = await axios.post(url, buffer, {
-            headers: {
-              'Authorization': `Bearer ${HUGGINGFACE_API_KEY}`,
-              'Content-Type': 'application/octet-stream'
-            },
-            timeout: 30000
-          });
-
-          let desc = '';
-          if (Array.isArray(retry.data) && retry.data[0]) {
-            desc = retry.data[0].generated_text || '';
-          } else if (retry.data?.generated_text) {
-            desc = retry.data.generated_text;
-          }
-
-          if (desc && desc.length > 3) {
-            console.log(`✅ Success on retry: "${desc}"`);
-            return desc;
-          }
-        } catch { /* continue to next model */ }
-      }
-    }
-  }
-
-  throw new Error('All AI models unavailable. Using fallback detection.');
-}
-
-
 const skipAuth = process.env.SKIP_AUTH === 'true';
 
-// 📸 Main route
+// 📸 Main endpoint - ANALYZE IMAGE
 router.post(
   '/analyze-image',
   ...(skipAuth ? [] : [protect]),
@@ -179,79 +241,126 @@ router.post(
     const file = req.file;
 
     if (!file) {
-      res.status(400).json({ success: false, message: 'No image' });
+      res.status(400).json({
+        success: false,
+        message: 'No image uploaded. Please upload a food image.'
+      });
       return;
     }
 
     const filePath = file.path;
-    console.log(`📸 ${file.originalname} (${(file.size / 1024).toFixed(1)}KB)`);
+    console.log(`\n📸 ====== NEW REQUEST ======`);
+    console.log(`File: ${file.originalname}`);
+    console.log(`Size: ${(file.size / 1024).toFixed(1)}KB`);
+    console.log(`Type: ${file.mimetype}`);
 
     try {
       const buffer = await fs.promises.readFile(filePath);
-
-      let description = '';
+      let analysis: FoodAnalysis;
       let usedAI = false;
+      let errorMessage = '';
 
-      // Try AI first
-      try {
-        description = await analyzeWithHF(buffer);
-        usedAI = true;
-        console.log(`🤖 AI: "${description}"`);
-      } catch (aiError: any) {
-        console.warn(`⚠️ AI failed: ${aiError.message}`);
-        // Fallback: use filename
-        description = file.originalname.toLowerCase();
-        console.log(`📝 Fallback: filename`);
+      // Încearcă cu Gemini AI
+      if (genAI) {
+        try {
+          console.log('🤖 Attempting AI analysis with Gemini...');
+          analysis = await analyzeWithGemini(buffer, file.mimetype);
+          usedAI = true;
+          console.log(`✅ AI Success: ${analysis.items.length} item(s) detected`);
+          console.log(`Total calories: ${analysis.total_nutrition.calories}`);
+        } catch (aiError: any) {
+          console.warn(`⚠️ AI analysis failed: ${aiError.message}`);
+          errorMessage = aiError.message;
+          analysis = basicFallback(file.originalname);
+          console.log('📝 Using fallback detection from filename');
+        }
+      } else {
+        console.warn('⚠️ Gemini AI not initialized, using fallback');
+        errorMessage = 'Gemini API not configured';
+        analysis = basicFallback(file.originalname);
       }
 
-      const info = matchFood(description);
-
-      res.json({
+      // Răspuns structurat pentru frontend
+      const response = {
         success: true,
-        mealName: info.mealName,
-        calories: info.calories,
-        nutrients: {
-          protein: info.protein,
-          carbs: info.carbs,
-          fats: info.fats
+        analysis: {
+          items: analysis.items,
+          totalNutrition: analysis.total_nutrition,
+          confidence: analysis.confidence,
+          notes: analysis.notes
         },
-        weight: info.weight,
-        confidence: usedAI ? info.confidence : 'medium',
-        aiDescription: usedAI ? description : `Detected from filename: ${info.mealName}`
-      });
+        metadata: {
+          usedAI,
+          aiProvider: usedAI ? 'Google Gemini 1.5 Flash' : 'Fallback Detection',
+          timestamp: new Date().toISOString(),
+          ...(errorMessage && !usedAI ? { warning: errorMessage } : {})
+        }
+      };
 
-      console.log(`✅ ${info.mealName} - ${info.calories} cal`);
+      res.json(response);
+      console.log(`✅ Response sent successfully`);
+      console.log(`====== END REQUEST ======\n`);
 
     } catch (error: any) {
-      console.error('❌ Error:', error.message);
+      console.error('❌ FATAL ERROR:', error.message);
+      console.error(error.stack);
       res.status(500).json({
         success: false,
-        message: error.message
+        message: 'Failed to analyze image',
+        error: error.message
       });
 
     } finally {
+      // Curăță fișierul temporar
       try {
         if (fs.existsSync(filePath)) {
           await fs.promises.unlink(filePath);
+          console.log('🗑️ Temp file deleted');
         }
-      } catch { /* ignore */ }
+      } catch (cleanupError) {
+        console.error('⚠️ Failed to delete temp file:', cleanupError);
+      }
     }
   }
 );
 
-// 🏥 Health
+// 🏥 Health check endpoint
 router.get('/health', (req: Request, res: Response) => {
   res.json({
     status: 'ok',
-    aiProvider: 'Hugging Face (with fallback)',
-    apiConfigured: !!HUGGINGFACE_API_KEY,
-    models: [
-      'nlpconnect/vit-gpt2-image-captioning',
-      'Salesforce/blip-image-captioning-base'
+    service: 'NutriSnap AI Food Analyzer',
+    aiProvider: 'Google Gemini 1.5 Flash',
+    apiConfigured: !!GEMINI_API_KEY,
+    aiInitialized: !!genAI,
+    features: [
+      'Multi-item detection (counts 2 kebabs, not just 1)',
+      'Ingredient identification',
+      'Accurate portion size estimation',
+      'Detailed nutritional analysis',
+      'High accuracy with clear images',
+      'Automatic fallback if AI fails'
     ],
-    fallback: 'filename-based detection',
-    foodItems: Object.keys(FOODS).length,
+    limits: {
+      freeRequests: '1500 requests/day',
+      maxFileSize: '10MB',
+      supportedFormats: ['JPEG', 'PNG', 'WebP']
+    },
+    environment: {
+      nodeEnv: process.env.NODE_ENV || 'development',
+      platform: os.platform(),
+      tempDir: tmpDir
+    },
     timestamp: new Date().toISOString()
+  });
+});
+
+// 🧪 Test endpoint (pentru debugging)
+router.get('/test', (req: Request, res: Response) => {
+  res.json({
+    message: 'AI Routes are working!',
+    geminiConfigured: !!GEMINI_API_KEY,
+    geminiInitialized: !!genAI,
+    keyPreview: GEMINI_API_KEY ? `${GEMINI_API_KEY.substring(0, 10)}...` : 'NOT SET'
   });
 });
 

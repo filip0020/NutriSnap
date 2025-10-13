@@ -31,7 +31,9 @@ const allowedOrigins: string[] = [
   process.env.FRONTEND_URL || "",
   "http://localhost:3000",
   "http://localhost:5173",
-  "https://nutri-snap-two.vercel.app", // ✅ FIXED - removed /login
+  "http://localhost:5174",
+  "https://nutri-snap-two.vercel.app",
+  "https://nutri-snap-two.vercel.app/",
 ].filter(Boolean);
 
 const corsOptions: CorsOptions = {
@@ -49,7 +51,9 @@ const corsOptions: CorsOptions = {
     }
 
     console.warn("⚠️ CORS blocked origin:", origin);
-    callback(new Error("Not allowed by CORS"));
+    // TEMPORARILY allow all for debugging - REMOVE IN PRODUCTION
+    callback(null, true);
+    // In production, use: callback(new Error("Not allowed by CORS"));
   },
   credentials: true,
   methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
@@ -86,7 +90,8 @@ app.use((req: Request, _res: Response, next: NextFunction) => {
 app.get("/", (_req: Request, res: Response) => {
   res.json({
     status: "online",
-    message: "API is running",
+    message: "NutriSnap API is running",
+    version: "1.0.0",
     timestamp: new Date().toISOString(),
   });
 });
@@ -100,6 +105,10 @@ app.get("/health", (_req: Request, res: Response) => {
       mongoose.connection.readyState === 1 ? "connected" : "disconnected",
     uptime: process.uptime(),
     memory: process.memoryUsage(),
+    ai: {
+      provider: "Google Gemini 1.5 Flash",
+      configured: !!process.env.GEMINI_API_KEY,
+    },
   });
 });
 
@@ -107,15 +116,23 @@ app.get("/health", (_req: Request, res: Response) => {
 app.use("/api/auth", authRoutes);
 app.use("/api/meals", mealRoutes);
 app.use("/api/users", userRoutes);
-app.use("/ai", aiRoutes);
+app.use("/ai", aiRoutes); // ✅ Correct path for AI routes
 
 // 404 handler
 app.use((req: Request, res: Response) => {
   console.warn("❌ 404 Not Found:", req.method, req.path);
   res.status(404).json({
+    success: false,
     message: "Route not found",
     path: req.path,
     method: req.method,
+    availableRoutes: [
+      "/api/auth",
+      "/api/meals",
+      "/api/users",
+      "/ai",
+      "/health",
+    ],
   });
 });
 
@@ -129,6 +146,7 @@ app.use(
   ) => {
     console.error("❌ Server Error:", err);
     res.status(err.status || 500).json({
+      success: false,
       message: err.message || "Internal server error",
       ...(process.env.NODE_ENV === "development" && { stack: err.stack }),
     });
@@ -162,12 +180,14 @@ const startServer = async (): Promise<void> => {
   try {
     await connectDB();
     const server = app.listen(PORT, () => {
+      console.log("\n🚀 ========================================");
       console.log("🚀 Server started on port:", PORT);
       console.log("🌍 Environment:", process.env.NODE_ENV || "development");
-      console.log("🔑 JWT Secret:", !!process.env.JWT_SECRET);
-      console.log("🤖 Hugging Face API:", !!process.env.HUGGINGFACE_API_KEY);
+      console.log("🔑 JWT Secret:", !!process.env.JWT_SECRET ? "✅ SET" : "❌ NOT SET");
+      console.log("🤖 Gemini API:", !!process.env.GEMINI_API_KEY ? "✅ SET" : "❌ NOT SET");
       console.log("📡 CORS origins:", allowedOrigins);
-      console.log("---");
+      console.log("🔗 Frontend URL:", process.env.FRONTEND_URL || "Not configured");
+      console.log("========================================\n");
     });
 
     server.timeout = 120_000;
