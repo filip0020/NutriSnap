@@ -186,7 +186,6 @@ router.post('/logout-all', auth_1.default, async (req, res) => {
         res.status(500).json({ message: 'Eroare la logout' });
     }
 });
-// Update Profile
 router.put('/profile', auth_1.default, async (req, res) => {
     try {
         const userId = req.user.id;
