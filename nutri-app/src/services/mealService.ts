@@ -27,24 +27,26 @@ export interface MealReport {
   meals: Meal[];
 }
 
+/**
+ * ✅ Adaugă o masă nouă
+ */
 export const addMeal = async (meal: Meal): Promise<Meal> => {
   try {
     console.log('📤 Sending meal:', meal);
 
-    // FIXED: Add /api prefix
-    const response = await apiClient.post<Meal>('/api/meals', meal);
+    // IMPORTANT: fără /api aici, pentru că apiClient deja include /api în baseURL
+    const response = await apiClient.post<Meal>('/meals', meal);
 
     console.log('✅ Meal added successfully:', response.data);
     return response.data;
   } catch (error: any) {
     console.error('❌ Error adding meal:', error);
 
-    // Better error messages
     if (error.code === 'ECONNABORTED') {
-      throw new Error('Server-ul nu răspunde. Încearcă din nou în câteva secunde.');
+      throw new Error('Serverul nu răspunde. Încearcă din nou în câteva secunde.');
     }
     if (error.response?.status === 404) {
-      throw new Error('Endpoint-ul nu a fost găsit. Verifică configurația API.');
+      throw new Error('Ruta /api/meals nu a fost găsită. Verifică configurarea API_URL.');
     }
     if (error.response?.status === 401) {
       throw new Error('Nu ești autentificat. Te rugăm să te autentifici din nou.');
@@ -54,6 +56,9 @@ export const addMeal = async (meal: Meal): Promise<Meal> => {
   }
 };
 
+/**
+ * ✅ Obține raportul de mese (zilnic / săptămânal / lunar)
+ */
 export const getMealReport = async (
   period: 'daily' | 'weekly' | 'monthly' = 'daily',
   date?: string
@@ -64,8 +69,7 @@ export const getMealReport = async (
 
     console.log('📤 Fetching meal report:', params);
 
-    // FIXED: Add /api prefix
-    const response = await apiClient.get<MealReport>('/api/meals/report', { params });
+    const response = await apiClient.get<MealReport>('/meals/report', { params });
 
     console.log('✅ Report received:', response.data);
     return response.data;
@@ -73,10 +77,10 @@ export const getMealReport = async (
     console.error('❌ Error fetching report:', error);
 
     if (error.code === 'ECONNABORTED') {
-      throw new Error('Server-ul nu răspunde. Încearcă din nou în câteva secunde.');
+      throw new Error('Serverul nu răspunde. Încearcă din nou în câteva secunde.');
     }
     if (error.response?.status === 404) {
-      throw new Error('Endpoint-ul nu a fost găsit.');
+      throw new Error('Ruta /api/meals/report nu a fost găsită.');
     }
     if (error.response?.status === 401) {
       throw new Error('Nu ești autentificat.');
@@ -86,12 +90,14 @@ export const getMealReport = async (
   }
 };
 
-// Export pentru verificare rapidă
+/**
+ * 🔍 Test rapid de conectivitate cu backendul
+ */
 export const testMealEndpoint = async (): Promise<boolean> => {
   try {
-    await apiClient.get('/api/meals/report', {
+    await apiClient.get('/meals/report', {
       params: { period: 'daily' },
-      timeout: 5000
+      timeout: 5000,
     });
     return true;
   } catch (error) {
