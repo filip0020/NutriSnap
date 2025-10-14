@@ -44,7 +44,7 @@ const saveMeal = async (type: 'manual' | 'image_ai') => {
             entryType: type,
         };
 
-        await apiClient.post('/meals', payload);
+        await apiClient.post('/api/meals', payload);
         analysisResult.value = null;
         await fetchDailyReport();
 
