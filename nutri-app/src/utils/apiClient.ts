@@ -6,7 +6,7 @@ const API_URL =
   import.meta.env.VITE_API_URL ||
   (import.meta.env.DEV
     ? 'http://localhost:5000/api'
-    : 'https://nutrisnap-y86m.onrender.com/api');
+    : 'https://nutrisnap-y86m.onrender.com');
 
 console.log('🔵 API_URL configurat:', API_URL);
 
