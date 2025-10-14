@@ -1,12 +1,12 @@
 import axios from 'axios';
 import type { AxiosInstance, AxiosError, InternalAxiosRequestConfig } from 'axios';
 
-// ✅ Config corect pentru Render + Vercel
+// ✅ FIX: Remove /api from baseURL - it's added in routes
 const API_URL =
   import.meta.env.VITE_API_URL ||
   (import.meta.env.DEV
-    ? 'http://localhost:5000/api'
-    : 'https://nutrisnap-y86m.onrender.com');
+    ? 'http://localhost:5000'  // ← WITHOUT /api
+    : 'https://nutrisnap-y86m.onrender.com'); // ← WITHOUT /api
 
 console.log('🔵 API_URL configurat:', API_URL);
 
@@ -21,7 +21,7 @@ const isTokenExpired = (token: string | null): boolean => {
     const exp = payload.exp * 1000;
     const now = Date.now();
     const isExpired = now >= exp;
-    console.log('🔍 Token check:', { exp: new Date(exp), now: new Date(now), isExpired });
+    console.log('🔐 Token check:', { exp: new Date(exp), now: new Date(now), isExpired });
     return isExpired;
   } catch (e) {
     console.error('❌ Error parsing token:', e);
@@ -29,7 +29,6 @@ const isTokenExpired = (token: string | null): boolean => {
   }
 };
 
-// ✅ Verificare tokenuri înainte de requesturi
 const validateTokens = (): boolean => {
   const accessToken = localStorage.getItem('accessToken');
   const refreshToken = localStorage.getItem('refreshToken');
@@ -51,9 +50,9 @@ const validateTokens = (): boolean => {
   return true;
 };
 
-// ✅ Instanța principală Axios
+// ✅ Axios instance WITHOUT /api in baseURL
 const apiClient: AxiosInstance = axios.create({
-  baseURL: API_URL, // ← prefix corect
+  baseURL: API_URL,
   headers: { 'Content-Type': 'application/json' },
   timeout: 60000,
   withCredentials: false,
@@ -63,7 +62,7 @@ const apiClient: AxiosInstance = axios.create({
 apiClient.interceptors.request.use(
   (config: InternalAxiosRequestConfig) => {
     const accessToken = localStorage.getItem('accessToken');
-    const publicEndpoints = ['/auth/login', '/auth/register']; // fără /api, baseURL deja are /api
+    const publicEndpoints = ['/api/auth/login', '/api/auth/register'];
     const isPublicEndpoint = publicEndpoints.some(endpoint => config.url?.includes(endpoint));
 
     if (accessToken && config.headers && !isPublicEndpoint) {
@@ -89,7 +88,7 @@ const processQueue = (error: any, token: string | null = null) => {
   failedQueue = [];
 };
 
-// 🔁 Response interceptor
+// 🔓 Response interceptor
 apiClient.interceptors.response.use(
   (response) => {
     console.log('✅ Response success:', response.config.url);
@@ -104,7 +103,6 @@ apiClient.interceptors.response.use(
       code: error.code,
     });
 
-    // Timeouts sau network
     if (error.code === 'ECONNABORTED' || error.message.includes('timeout')) {
       return Promise.reject({
         ...error,
@@ -119,12 +117,11 @@ apiClient.interceptors.response.use(
       });
     }
 
-    // Doar pentru 401
     if (error.response?.status !== 401 || originalRequest._retry) {
       return Promise.reject(error);
     }
 
-    const noRefreshEndpoints = ['/auth/login', '/auth/register', '/auth/refresh'];
+    const noRefreshEndpoints = ['/api/auth/login', '/api/auth/register', '/api/auth/refresh'];
     if (noRefreshEndpoints.some(endpoint => originalRequest.url?.includes(endpoint))) {
       return Promise.reject(error);
     }
@@ -136,7 +133,6 @@ apiClient.interceptors.response.use(
       return Promise.reject(error);
     }
 
-    // Queue refresh
     if (isRefreshing) {
       return new Promise((resolve, reject) => failedQueue.push({ resolve, reject }))
         .then((newToken) => {
@@ -154,9 +150,8 @@ apiClient.interceptors.response.use(
     try {
       console.log('🔄 Attempting token refresh...');
 
-      // ✅ FIX: fără dublu /api/api
       const response = await axios.post(
-        `${API_URL}/auth/refresh`,
+        `${API_URL}/api/auth/refresh`,
         { refreshToken },
         {
           timeout: 60000,

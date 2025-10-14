@@ -34,8 +34,8 @@ export const addMeal = async (meal: Meal): Promise<Meal> => {
   try {
     console.log('📤 Sending meal:', meal);
 
-    // IMPORTANT: fără /api aici, pentru că apiClient deja include /api în baseURL
-    const response = await apiClient.post<Meal>('/meals', meal);
+    // ✅ FIX: Add /api prefix because baseURL doesn't include it
+    const response = await apiClient.post<Meal>('/api/meals', meal);
 
     console.log('✅ Meal added successfully:', response.data);
     return response.data;
@@ -69,7 +69,8 @@ export const getMealReport = async (
 
     console.log('📤 Fetching meal report:', params);
 
-    const response = await apiClient.get<MealReport>('/meals/report', { params });
+    // ✅ FIX: Add /api prefix
+    const response = await apiClient.get<MealReport>('/api/meals/report', { params });
 
     console.log('✅ Report received:', response.data);
     return response.data;
@@ -95,7 +96,7 @@ export const getMealReport = async (
  */
 export const testMealEndpoint = async (): Promise<boolean> => {
   try {
-    await apiClient.get('/meals/report', {
+    await apiClient.get('/api/meals/report', {
       params: { period: 'daily' },
       timeout: 5000,
     });
