@@ -1,13 +1,12 @@
-import { Request, Response } from "express";
-import bcrypt from "bcryptjs";
+import { Response } from "express";
 import jwt from "jsonwebtoken";
-import User from "../models/User";
+import User, { AuthRequest } from "../models/User";
 
-const JWT_SECRET = process.env.JWT_SECRET || "your-secret-key";
-const JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET || "your-refresh-secret";
+const JWT_SECRET = process.env.JWT_SECRET || "secretkey";
+const JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET || "refresh-secret";
 
 // Register new user
-export const register = async (req: Request, res: Response): Promise<void> => {
+export const register = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     console.log("📝 Register request received:", req.body.email);
 
@@ -43,35 +42,28 @@ export const register = async (req: Request, res: Response): Promise<void> => {
       return;
     }
 
-    // Hash password
-    const hashedPassword = await bcrypt.hash(password, 10);
-
-    // Create user
+    // Create user - password will be hashed automatically by pre-save hook
     const user = await User.create({
       email: email.toLowerCase(),
-      password: hashedPassword,
-      caloriesTarget: 2000, // Default
-      activityLevel: 1.2, // Default sedentary
+      password: password, // Don't hash here - model does it automatically
+      caloriesTarget: 2000,
+      activityLevel: 1.2,
     });
 
     console.log("✅ User created:", user.email);
 
     // Generate tokens
     const accessToken = jwt.sign(
-      { userId: user._id, email: user.email },
+      { id: user._id.toString(), email: user.email },
       JWT_SECRET,
       { expiresIn: "7d" }
     );
 
     const refreshToken = jwt.sign(
-      { userId: user._id },
+      { id: user._id.toString() },
       JWT_REFRESH_SECRET,
       { expiresIn: "30d" }
     );
-
-    // Save refresh token
-    user.refreshToken = refreshToken;
-    await user.save();
 
     console.log("✅ Tokens generated for:", user.email);
 
@@ -81,7 +73,7 @@ export const register = async (req: Request, res: Response): Promise<void> => {
       accessToken,
       refreshToken,
       user: {
-        id: user._id,
+        id: user._id.toString(),
         email: user.email,
         caloriesTarget: user.caloriesTarget,
         activityLevel: user.activityLevel,
@@ -98,7 +90,7 @@ export const register = async (req: Request, res: Response): Promise<void> => {
 };
 
 // Login user
-export const login = async (req: Request, res: Response): Promise<void> => {
+export const login = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     console.log("🔐 Login request received:", req.body.email);
 
@@ -124,8 +116,8 @@ export const login = async (req: Request, res: Response): Promise<void> => {
       return;
     }
 
-    // Check password
-    const isValidPassword = await bcrypt.compare(password, user.password);
+    // Check password using comparePassword method from model
+    const isValidPassword = await user.comparePassword(password);
     if (!isValidPassword) {
       console.warn("⚠️ Invalid password for:", email);
       res.status(401).json({
@@ -137,20 +129,16 @@ export const login = async (req: Request, res: Response): Promise<void> => {
 
     // Generate tokens
     const accessToken = jwt.sign(
-      { userId: user._id, email: user.email },
+      { id: user._id.toString(), email: user.email },
       JWT_SECRET,
       { expiresIn: "7d" }
     );
 
     const refreshToken = jwt.sign(
-      { userId: user._id },
+      { id: user._id.toString() },
       JWT_REFRESH_SECRET,
       { expiresIn: "30d" }
     );
-
-    // Save refresh token
-    user.refreshToken = refreshToken;
-    await user.save();
 
     console.log("✅ Login successful:", user.email);
 
@@ -159,7 +147,7 @@ export const login = async (req: Request, res: Response): Promise<void> => {
       accessToken,
       refreshToken,
       user: {
-        id: user._id,
+        id: user._id.toString(),
         email: user.email,
         caloriesTarget: user.caloriesTarget,
         activityLevel: user.activityLevel,
@@ -176,18 +164,9 @@ export const login = async (req: Request, res: Response): Promise<void> => {
 };
 
 // Logout user
-export const logout = async (req: Request, res: Response): Promise<void> => {
+export const logout = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const { refreshToken } = req.body;
-
-    if (refreshToken) {
-      const user = await User.findOne({ refreshToken });
-      if (user) {
-        user.refreshToken = undefined;
-        await user.save();
-        console.log("✅ User logged out:", user.email);
-      }
-    }
+    console.log("👋 Logout request");
 
     res.json({
       success: true,
@@ -203,10 +182,10 @@ export const logout = async (req: Request, res: Response): Promise<void> => {
 };
 
 // Verify token
-export const verifyToken = async (req: Request, res: Response): Promise<void> => {
+export const verifyToken = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     // User is already attached by middleware
-    const user = (req as any).user;
+    const user = req.user;
 
     if (!user) {
       res.status(401).json({
@@ -216,10 +195,12 @@ export const verifyToken = async (req: Request, res: Response): Promise<void> =>
       return;
     }
 
+    console.log("✅ Token verified for:", user.email);
+
     res.json({
       success: true,
       user: {
-        id: user._id,
+        id: user.id,
         email: user.email,
         caloriesTarget: user.caloriesTarget,
         activityLevel: user.activityLevel,
@@ -235,9 +216,18 @@ export const verifyToken = async (req: Request, res: Response): Promise<void> =>
 };
 
 // Update user profile
-export const updateProfile = async (req: Request, res: Response): Promise<void> => {
+export const updateProfile = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const userId = (req as any).user._id;
+    const userId = req.user?.id;
+
+    if (!userId) {
+      res.status(401).json({
+        success: false,
+        message: "Neautorizat"
+      });
+      return;
+    }
+
     const { caloriesTarget, activityLevel } = req.body;
 
     const user = await User.findById(userId);
@@ -263,7 +253,7 @@ export const updateProfile = async (req: Request, res: Response): Promise<void> 
     res.json({
       success: true,
       user: {
-        id: user._id,
+        id: user._id.toString(),
         email: user.email,
         caloriesTarget: user.caloriesTarget,
         activityLevel: user.activityLevel,
