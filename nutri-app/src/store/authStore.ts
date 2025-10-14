@@ -1,279 +1,273 @@
-import { Request, Response } from "express";
-import bcrypt from "bcryptjs";
-import jwt from "jsonwebtoken";
-import User from "../models/User";
+import { defineStore } from 'pinia';
+import { ref, computed } from 'vue';
+import apiClient, { checkAuth } from '@/utils/apiClient';
+import router from '@/router';
 
-const JWT_SECRET = process.env.JWT_SECRET || "your-secret-key";
-const JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET || "your-refresh-secret";
+interface User {
+  id: string;
+  email: string;
+  caloriesTarget: number;
+  activityLevel: number;
+}
 
-// Register new user
-export const register = async (req: Request, res: Response): Promise<void> => {
-  try {
-    console.log("📝 Register request received:", req.body.email);
+interface LoginResponse {
+  accessToken: string;
+  refreshToken: string;
+  user: User;
+}
 
-    const { email, password } = req.body;
+export const useAuthStore = defineStore('auth', () => {
+  const user = ref<User | null>(null);
+  const loading = ref(false);
+  const error = ref<string | null>(null);
 
-    // Validation
-    if (!email || !password) {
-      console.warn("⚠️ Missing email or password");
-      res.status(400).json({
-        success: false,
-        message: "Email și parola sunt obligatorii"
-      });
+  const isAuthenticated = computed(() => {
+    const hasToken = !!localStorage.getItem('accessToken');
+    const hasUser = !!user.value;
+    return hasToken && hasUser;
+  });
+
+  const initialize = async () => {
+    // ✅ First check if tokens exist and are valid (client-side check)
+    if (!checkAuth()) {
+      console.log('ℹ️ Nu există tokene valide salvate');
       return;
     }
 
-    if (password.length < 6) {
-      console.warn("⚠️ Password too short");
-      res.status(400).json({
-        success: false,
-        message: "Parola trebuie să aibă minimum 6 caractere"
-      });
-      return;
-    }
+    console.log('🔄 Verificare token existent...');
+    loading.value = true;
 
-    // Check if user exists
-    const existingUser = await User.findOne({ email: email.toLowerCase() });
-    if (existingUser) {
-      console.warn("⚠️ User already exists:", email);
-      res.status(409).json({
-        success: false,
-        message: "Email-ul este deja înregistrat"
-      });
-      return;
-    }
-
-    // Hash password
-    const hashedPassword = await bcrypt.hash(password, 10);
-
-    // Create user
-    const user = await User.create({
-      email: email.toLowerCase(),
-      password: hashedPassword,
-      caloriesTarget: 2000, // Default
-      activityLevel: 1.2, // Default sedentary
-    });
-
-    console.log("✅ User created:", user.email);
-
-    // Generate tokens
-    const accessToken = jwt.sign(
-      { userId: user._id, email: user.email },
-      JWT_SECRET,
-      { expiresIn: "7d" }
-    );
-
-    const refreshToken = jwt.sign(
-      { userId: user._id },
-      JWT_REFRESH_SECRET,
-      { expiresIn: "30d" }
-    );
-
-    // Save refresh token
-    user.refreshToken = refreshToken;
-    await user.save();
-
-    console.log("✅ Tokens generated for:", user.email);
-
-    // Return response
-    res.status(201).json({
-      success: true,
-      accessToken,
-      refreshToken,
-      user: {
-        id: user._id,
-        email: user.email,
-        caloriesTarget: user.caloriesTarget,
-        activityLevel: user.activityLevel,
-      },
-    });
-  } catch (error: any) {
-    console.error("❌ Register error:", error);
-    res.status(500).json({
-      success: false,
-      message: "Eroare la înregistrare",
-      error: process.env.NODE_ENV === "development" ? error.message : undefined,
-    });
-  }
-};
-
-// Login user
-export const login = async (req: Request, res: Response): Promise<void> => {
-  try {
-    console.log("🔐 Login request received:", req.body.email);
-
-    const { email, password } = req.body;
-
-    // Validation
-    if (!email || !password) {
-      res.status(400).json({
-        success: false,
-        message: "Email și parola sunt obligatorii"
-      });
-      return;
-    }
-
-    // Find user
-    const user = await User.findOne({ email: email.toLowerCase() });
-    if (!user) {
-      console.warn("⚠️ User not found:", email);
-      res.status(401).json({
-        success: false,
-        message: "Email sau parolă incorectă"
-      });
-      return;
-    }
-
-    // Check password
-    const isValidPassword = await bcrypt.compare(password, user.password);
-    if (!isValidPassword) {
-      console.warn("⚠️ Invalid password for:", email);
-      res.status(401).json({
-        success: false,
-        message: "Email sau parolă incorectă"
-      });
-      return;
-    }
-
-    // Generate tokens
-    const accessToken = jwt.sign(
-      { userId: user._id, email: user.email },
-      JWT_SECRET,
-      { expiresIn: "7d" }
-    );
-
-    const refreshToken = jwt.sign(
-      { userId: user._id },
-      JWT_REFRESH_SECRET,
-      { expiresIn: "30d" }
-    );
-
-    // Save refresh token
-    user.refreshToken = refreshToken;
-    await user.save();
-
-    console.log("✅ Login successful:", user.email);
-
-    res.json({
-      success: true,
-      accessToken,
-      refreshToken,
-      user: {
-        id: user._id,
-        email: user.email,
-        caloriesTarget: user.caloriesTarget,
-        activityLevel: user.activityLevel,
-      },
-    });
-  } catch (error: any) {
-    console.error("❌ Login error:", error);
-    res.status(500).json({
-      success: false,
-      message: "Eroare la autentificare",
-      error: process.env.NODE_ENV === "development" ? error.message : undefined,
-    });
-  }
-};
-
-// Logout user
-export const logout = async (req: Request, res: Response): Promise<void> => {
-  try {
-    const { refreshToken } = req.body;
-
-    if (refreshToken) {
-      const user = await User.findOne({ refreshToken });
-      if (user) {
-        user.refreshToken = undefined;
-        await user.save();
-        console.log("✅ User logged out:", user.email);
+    try {
+      // ✅ Get cached user first
+      const cachedUser = localStorage.getItem('user');
+      if (cachedUser) {
+        try {
+          user.value = JSON.parse(cachedUser);
+          console.log('✅ User cached loaded:', user.value?.email);
+        } catch (e) {
+          console.error('❌ Error parsing cached user');
+        }
       }
+
+      // ✅ Then verify with server (with shorter timeout) - FIXED PATH
+      try {
+        const response = await apiClient.get<{ user: User }>('/api/auth/verify', {
+          timeout: 10000 // 10s timeout for verification
+        });
+        user.value = response.data.user;
+        // Update cache
+        localStorage.setItem('user', JSON.stringify(response.data.user));
+        console.log('✅ Utilizator verificat cu server:', user.value.email);
+      } catch (verifyError: any) {
+        console.warn('⚠️ Server verification failed:', verifyError.message);
+
+        // ✅ If timeout or network error, keep user logged in with cached data
+        if (verifyError.skipLogout || verifyError.code === 'ECONNABORTED' || verifyError.code === 'ERR_NETWORK') {
+          console.log('🔄 Keeping user logged in despite verification failure');
+          if (!user.value && cachedUser) {
+            try {
+              user.value = JSON.parse(cachedUser);
+              console.log('✅ Using cached user data');
+            } catch (e) {
+              console.error('❌ Failed to parse cached user');
+            }
+          }
+        } else if (verifyError.response?.status === 401) {
+          // ✅ Real auth error - logout
+          console.log('❌ Token invalid (401) - logging out');
+          localStorage.clear();
+          user.value = null;
+
+          const currentPath = window.location.pathname;
+          if (currentPath !== '/login' && currentPath !== '/register') {
+            router.push('/login');
+          }
+        }
+      }
+    } catch (err: any) {
+      console.error('❌ Initialize error:', err);
+      // Don't logout on general errors
+    } finally {
+      loading.value = false;
     }
+  };
 
-    res.json({
-      success: true,
-      message: "Logout reușit"
-    });
-  } catch (error: any) {
-    console.error("❌ Logout error:", error);
-    res.status(500).json({
-      success: false,
-      message: "Eroare la logout"
-    });
-  }
-};
+  // Login
+  const login = async (email: string, password: string) => {
+    loading.value = true;
+    error.value = null;
 
-// Verify token
-export const verifyToken = async (req: Request, res: Response): Promise<void> => {
-  try {
-    // User is already attached by middleware
-    const user = (req as any).user;
+    try {
+      console.log('📤 Încercare login pentru:', email);
 
-    if (!user) {
-      res.status(401).json({
-        success: false,
-        message: "Token invalid"
+      // FIXED PATH: /api/auth/login
+      const response = await apiClient.post<LoginResponse>('/api/auth/login', {
+        email,
+        password
       });
-      return;
+
+      const { accessToken, refreshToken, user: userData } = response.data;
+
+      // Salvăm tokenele și user-ul
+      localStorage.setItem('accessToken', accessToken);
+      localStorage.setItem('refreshToken', refreshToken);
+      localStorage.setItem('user', JSON.stringify(userData));
+
+      // Setăm user-ul
+      user.value = userData;
+
+      console.log('✅ Login reușit:', userData.email);
+
+      // Redirecționăm la home
+      router.push('/');
+
+      return true;
+    } catch (err: any) {
+      console.error('❌ Eroare login:', err);
+
+      if (err.code === 'ECONNABORTED') {
+        error.value = 'Timeout: Serverul nu răspunde. Încearcă din nou.';
+      } else if (err.code === 'ERR_NETWORK') {
+        error.value = 'Eroare de conexiune. Verifică dacă serverul rulează.';
+      } else if (err.response?.status === 401) {
+        error.value = 'Email sau parolă incorectă';
+      } else {
+        error.value = err.response?.data?.message || 'Eroare la autentificare';
+      }
+
+      return false;
+    } finally {
+      loading.value = false;
     }
+  };
 
-    res.json({
-      success: true,
-      user: {
-        id: user._id,
-        email: user.email,
-        caloriesTarget: user.caloriesTarget,
-        activityLevel: user.activityLevel,
-      },
-    });
-  } catch (error: any) {
-    console.error("❌ Verify token error:", error);
-    res.status(401).json({
-      success: false,
-      message: "Token invalid"
-    });
-  }
-};
+  // Register
+  const register = async (email: string, password: string) => {
+    loading.value = true;
+    error.value = null;
 
-// Update user profile
-export const updateProfile = async (req: Request, res: Response): Promise<void> => {
-  try {
-    const userId = (req as any).user._id;
-    const { caloriesTarget, activityLevel } = req.body;
+    try {
+      console.log('📤 Încercare înregistrare pentru:', email);
 
-    const user = await User.findById(userId);
-    if (!user) {
-      res.status(404).json({
-        success: false,
-        message: "Utilizator negăsit"
+      // FIXED PATH: /api/auth/register
+      const response = await apiClient.post<LoginResponse>('/api/auth/register', {
+        email,
+        password
       });
-      return;
+
+      const { accessToken, refreshToken, user: userData } = response.data;
+
+      // Salvăm tokenele și user-ul
+      localStorage.setItem('accessToken', accessToken);
+      localStorage.setItem('refreshToken', refreshToken);
+      localStorage.setItem('user', JSON.stringify(userData));
+
+      // Setăm user-ul
+      user.value = userData;
+
+      console.log('✅ Înregistrare reușită:', userData.email);
+
+      // Redirecționăm la home
+      router.push('/');
+
+      return true;
+    } catch (err: any) {
+      console.error('❌ Eroare înregistrare:', err);
+
+      if (err.code === 'ECONNABORTED') {
+        error.value = 'Timeout: Serverul nu răspunde. Încearcă din nou.';
+      } else if (err.code === 'ERR_NETWORK') {
+        error.value = 'Eroare de conexiune. Verifică dacă serverul rulează.';
+      } else if (err.response?.status === 400) {
+        error.value = err.response?.data?.message || 'Date invalide';
+      } else if (err.response?.status === 409) {
+        error.value = 'Email-ul este deja înregistrat';
+      } else {
+        error.value = err.response?.data?.message || 'Eroare la înregistrare';
+      }
+
+      return false;
+    } finally {
+      loading.value = false;
     }
+  };
 
-    if (caloriesTarget !== undefined) {
-      user.caloriesTarget = caloriesTarget;
+  // Logout
+  const logout = async () => {
+    loading.value = true;
+
+    try {
+      const refreshToken = localStorage.getItem('refreshToken');
+
+      if (refreshToken) {
+        // Încercăm să invalidăm token-ul pe server (fire and forget)
+        try {
+          // FIXED PATH: /api/auth/logout
+          await apiClient.post('/api/auth/logout', { refreshToken }, {
+            timeout: 5000 // Short timeout
+          });
+          console.log('✅ Logout server reușit');
+        } catch (err) {
+          console.warn('⚠️ Eroare logout server (continuăm cu logout local)');
+        }
+      }
+    } finally {
+      // Curățăm storage-ul și state-ul local indiferent de rezultat
+      localStorage.removeItem('accessToken');
+      localStorage.removeItem('refreshToken');
+      localStorage.removeItem('user');
+      user.value = null;
+      loading.value = false;
+
+      console.log('✅ Logout local complet');
+      router.push('/login');
     }
-    if (activityLevel !== undefined) {
-      user.activityLevel = activityLevel;
+  };
+
+  // Update user profile
+  const updateProfile = async (data: Partial<User>) => {
+    loading.value = true;
+    error.value = null;
+
+    try {
+      console.log('📤 Actualizare profil:', data);
+
+      // FIXED PATH: /api/auth/profile
+      const response = await apiClient.put<{ user: User }>('/api/auth/profile', data);
+      user.value = response.data.user;
+
+      // Update cache
+      localStorage.setItem('user', JSON.stringify(response.data.user));
+
+      console.log('✅ Profil actualizat');
+      return true;
+    } catch (err: any) {
+      console.error('❌ Eroare actualizare profil:', err);
+      error.value = err.response?.data?.message || 'Eroare la actualizarea profilului';
+      return false;
+    } finally {
+      loading.value = false;
     }
+  };
 
-    await user.save();
+  // Clear error
+  const clearError = () => {
+    error.value = null;
+  };
 
-    console.log("✅ Profile updated:", user.email);
+  return {
+    // State
+    user,
+    loading,
+    error,
+    isAuthenticated,
 
-    res.json({
-      success: true,
-      user: {
-        id: user._id,
-        email: user.email,
-        caloriesTarget: user.caloriesTarget,
-        activityLevel: user.activityLevel,
-      },
-    });
-  } catch (error: any) {
-    console.error("❌ Update profile error:", error);
-    res.status(500).json({
-      success: false,
-      message: "Eroare la actualizarea profilului"
-    });
-  }
-};
+    // Actions
+    initialize,
+    login,
+    register,
+    logout,
+    updateProfile,
+    clearError
+  };
+});
