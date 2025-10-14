@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
-import axios from 'axios';
+import apiClient from '@/utils/apiClient'; // ✅ USE apiClient instead of axios
 
 interface Nutrients {
   protein: number;
@@ -25,7 +25,8 @@ const fetchHistory = async () => {
   isLoading.value = true;
   error.value = null;
   try {
-    const response = await axios.get('http://localhost:3000/api/meals');
+    // ✅ FIXED: Use apiClient with /api prefix
+    const response = await apiClient.get('/api/meals');
     entries.value = response.data;
   } catch (err: any) {
     error.value = err.response?.data?.message || 'Eroare la încărcarea istoricului. Asigură-te că ești logat.';
@@ -35,7 +36,13 @@ const fetchHistory = async () => {
 };
 
 const formatDate = (dateString: string) => {
-  const options: Intl.DateTimeFormatOptions = { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' };
+  const options: Intl.DateTimeFormatOptions = {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
+  };
   return new Date(dateString).toLocaleDateString('ro-RO', options);
 };
 
@@ -46,7 +53,6 @@ onMounted(() => {
 
 <template>
   <div class="history">
-
     <h2 class="history__title">Istoric Jurnal Nutrițional</h2>
 
     <div v-if="isLoading" class="history__loading">Se încarcă intrările...</div>
@@ -81,10 +87,5 @@ onMounted(() => {
 
       </div>
     </div>
-
   </div>
 </template>
-
-<style scoped>
-/* Clase BEM pentru stilizare ulterioară */
-</style>

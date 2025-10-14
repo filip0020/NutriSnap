@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
-import axios from 'axios';
+import apiClient from '@/utils/apiClient'; // ✅ USE apiClient
 import { useAuthStore } from '../store/authStore';
 
 const authStore = useAuthStore();
@@ -24,7 +24,8 @@ const fetchProfile = async () => {
     isLoading.value = true;
     error.value = null;
     try {
-        const response = await axios.get('http://localhost:3000/api/users/profile');
+        // ✅ FIXED: Use apiClient with /api prefix
+        const response = await apiClient.get('/api/users/profile');
         userProfile.value = response.data;
 
         if (userProfile.value) {
@@ -44,8 +45,13 @@ const updateProfile = async () => {
     error.value = null;
     successMessage.value = null;
     try {
-        const payload = { caloriesTarget: targetInput.value, activityLevel: activityInput.value };
-        const response = await axios.put('http://localhost:3000/api/users/profile', payload);
+        const payload = {
+            caloriesTarget: targetInput.value,
+            activityLevel: activityInput.value
+        };
+
+        // ✅ FIXED: Use apiClient with /api prefix
+        const response = await apiClient.put('/api/users/profile', payload);
         userProfile.value = response.data;
         successMessage.value = 'Profil actualizat cu succes!';
     } catch (err: any) {
@@ -62,7 +68,6 @@ onMounted(() => {
 
 <template>
     <div class="profile">
-
         <h2 class="profile__title">Setări Profil & Obiective</h2>
 
         <div v-if="isLoading" class="profile__loading">Se încarcă datele...</div>
@@ -98,10 +103,5 @@ onMounted(() => {
             <button @click="authStore.logout" class="profile__btn-logout">Delogare</button>
 
         </div>
-
     </div>
 </template>
-
-<style scoped>
-/* Clase BEM pentru stilizare ulterioară */
-</style>
