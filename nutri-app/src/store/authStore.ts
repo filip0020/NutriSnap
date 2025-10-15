@@ -224,7 +224,7 @@ export const useAuthStore = defineStore('auth', () => {
     }
   };
 
-  // Update user profile
+  // Update user profile - FIXED PATH
   const updateProfile = async (data: Partial<User>) => {
     loading.value = true;
     error.value = null;
@@ -232,14 +232,19 @@ export const useAuthStore = defineStore('auth', () => {
     try {
       console.log('📤 Actualizare profil:', data);
 
-      // FIXED PATH: /api/auth/profile
-      const response = await apiClient.put<{ user: User }>('/api/auth/profile', data);
-      user.value = response.data.user;
+      // FIXED PATH: /api/users/profile (NOT /api/auth/profile)
+      const response = await apiClient.put<{ email: string; caloriesTarget: number; activityLevel: number }>('/api/users/profile', data);
 
-      // Update cache
-      localStorage.setItem('user', JSON.stringify(response.data.user));
+      // Update user in store
+      if (user.value) {
+        user.value.caloriesTarget = response.data.caloriesTarget;
+        user.value.activityLevel = response.data.activityLevel;
 
-      console.log('✅ Profil actualizat');
+        // Update cache
+        localStorage.setItem('user', JSON.stringify(user.value));
+      }
+
+      console.log('✅ Profil actualizat:', response.data);
       return true;
     } catch (err: any) {
       console.error('❌ Eroare actualizare profil:', err);
