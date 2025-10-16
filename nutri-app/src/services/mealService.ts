@@ -56,9 +56,6 @@ export const addMeal = async (meal: Meal): Promise<Meal> => {
   }
 };
 
-/**
- * ✅ Obține raportul de mese (zilnic / săptămânal / lunar)
- */
 export const getMealReport = async (
   period: 'daily' | 'weekly' | 'monthly' = 'daily',
   date?: string
@@ -91,9 +88,6 @@ export const getMealReport = async (
   }
 };
 
-/**
- * 🔍 Test rapid de conectivitate cu backendul
- */
 export const testMealEndpoint = async (): Promise<boolean> => {
   try {
     await apiClient.get('/api/meals/report', {

@@ -66,15 +66,10 @@ const corsOptions: CorsOptions = {
   optionsSuccessStatus: 204,
 };
 
-// ✅ Apply CORS before other middleware
 app.use(cors(corsOptions));
 
-// ✅ Explicitly handle OPTIONS requests
 app.options("*", cors(corsOptions));
 
-// -----------------------------
-// 🧰 MIDDLEWARE
-// -----------------------------
 app.use(express.json({ limit: "50mb" }));
 app.use(express.urlencoded({ extended: true, limit: "50mb" }));
 

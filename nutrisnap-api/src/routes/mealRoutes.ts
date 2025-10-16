@@ -81,27 +81,50 @@ router.get('/report', protect, async (req: AuthRequest<{}, ReportQuery>, res: Re
             return;
         }
 
-        const { caloriesTarget, activityLevel } = user;
+        // ✅ FIX: Setează target implicit la 2000 dacă nu există
+        const caloriesTarget = user.caloriesTarget || 2000;
+        const activityLevel = user.activityLevel || 0;
+
         const meals = await Meal.find({ userId, date: { $gte: startDate, $lte: endDate } }).sort({ date: -1 });
 
         let totalConsumed = 0;
-        let totalBurnedFromEntries = 0;
-        const totalDays = Math.ceil((endDate.getTime() - startDate.getTime()) / (24 * 60 * 60 * 1000));
+        let totalBurnedFromExercise = 0;
+        const totalDays = period === 'daily' ? 1 : Math.ceil((endDate.getTime() - startDate.getTime()) / (24 * 60 * 60 * 1000)) || 1;
 
         meals.forEach(meal => {
-            if (meal.entryType === 'exercise') totalBurnedFromEntries += meal.calories;
-            else totalConsumed += meal.calories;
+            if (meal.entryType === 'exercise') {
+                // ✅ Exercițiile ard calorii
+                totalBurnedFromExercise += meal.calories;
+            } else {
+                // ✅ Mesele consumă calorii
+                totalConsumed += meal.calories;
+            }
         });
 
-        const baseActivityBurned = activityLevel * totalDays;
-        const totalBurned = totalBurnedFromEntries + baseActivityBurned;
-        const netCalories = totalConsumed - totalBurned;
         const targetCaloriesTotal = caloriesTarget * totalDays;
-        const deficitOrSurplus = netCalories - targetCaloriesTotal;
-        const status = deficitOrSurplus > 100 ? 'surplus' : deficitOrSurplus < -100 ? 'deficit' : 'maintenance';
+        const balance = targetCaloriesTotal + totalBurnedFromExercise - totalConsumed;
+
+        // ✅ Status bazat pe balanța ZILNICĂ medie
+        const averageDailyBalance = balance / totalDays;
+        let status: 'surplus' | 'deficit' | 'maintenance';
+
+        if (averageDailyBalance < -100) {
+            status = 'surplus'; // Ai mâncat prea mult (surplus caloric)
+        } else if (averageDailyBalance > 100) {
+            status = 'deficit'; // Mai ai de mâncat (deficit de consum)
+        } else {
+            status = 'maintenance'; // Perfect echilibrat
+        }
 
         res.status(200).json({
-            summary: { target: targetCaloriesTotal, totalConsumed, totalBurned, netCalories, balance: deficitOrSurplus, status },
+            summary: {
+                target: targetCaloriesTotal,
+                totalConsumed,
+                totalBurned: totalBurnedFromExercise,
+                netCalories: totalConsumed - totalBurnedFromExercise, // Caloriile nete consumate
+                balance, // Câte calorii mai poți consuma
+                status
+            },
             meals
         });
     } catch (error) {
