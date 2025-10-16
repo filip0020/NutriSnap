@@ -113,6 +113,7 @@ IMPORTANT RULES:
 - Be specific about ingredients you can actually see
 - Use realistic nutritional data for similar foods
 - confidence: "high" = clear image, "medium" = partially visible, "low" = unclear
+- If it is unknown food, return 0 kcal, 0 proteins, 0 carbs, 0 fats and 0 fiber 
 - Always return valid JSON only`;
 
   try {
